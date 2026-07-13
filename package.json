@@ -1,0 +1,30 @@
+{
+  "name": "stayez-chatbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test:leads": "node tests/run-sample-leads.js",
+    "add-host": "node scripts/add-host.js",
+    "test": "node scripts/smoke-test.js",
+    "healthcheck": "node scripts/healthcheck.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "better-sqlite3": "^12.10.1",
+    "dotenv": "^17.4.2",
+    "groq-sdk": "^1.2.1",
+    "node-fetch": "^3.3.2",
+    "node-telegram-bot-api": "^1.1.0",
+    "openai": "^6.42.0",
+    "pg": "^8.22.0",
+    "pino": "^10.3.1",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
