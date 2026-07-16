@@ -1,13 +1,126 @@
 import { runClassifier } from '../agents/classifier.js';
 import { runMatcher } from '../agents/matcher.js';
 import { runDrafter } from '../agents/drafter.js';
+import { fetchMetaProfile } from '../agents/meta-sender.js';
 import { sendCards } from '../telegram/index.js';
 import db from '../db/index.js';
+import { query } from '../db/pg.js';
+import { claimInboundMessage, markInboundMessageStatus } from '../db/listener-state.js';
 import { validateInboundMessage, GuardrailError } from '../guardrails/index.js';
+import { normalizeInboundMessage } from '../schema/inbound-message.js';
 import { randomUUID } from 'crypto';
 import pino from 'pino';
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+
+const isUndefinedPostgresColumn = (error) => error?.code === '42703';
+
+const insertSaasLead = async (safeMsgData, classification, tenantConfig) => {
+  const { language, extracted_data, confidence } = classification;
+  const extendedInsert = `
+    INSERT INTO leads (
+      organization_id, source_type, source_id, source_name, source_platform, source_channel,
+      source_group_name, external_message_id, sender_external_id, received_at, contactability_status,
+      metadata, sender_number, sender_name, raw_message, detected_language, extracted_data,
+      classifier_confidence, status
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'processing')
+    RETURNING id
+  `;
+  const extendedParams = [
+    tenantConfig.organization_id,
+    safeMsgData.source_type,
+    safeMsgData.source_id,
+    safeMsgData.source_name,
+    safeMsgData.source_platform,
+    safeMsgData.source_channel,
+    safeMsgData.source_group_name,
+    safeMsgData.external_message_id,
+    safeMsgData.sender_external_id,
+    safeMsgData.received_at,
+    safeMsgData.contactability_status,
+    JSON.stringify(safeMsgData.metadata || {}),
+    safeMsgData.sender_number,
+    safeMsgData.sender_name,
+    safeMsgData.raw_message,
+    language,
+    JSON.stringify(extracted_data),
+    confidence
+  ];
+
+  try {
+    const result = await query(extendedInsert, extendedParams);
+    return result.rows[0].id;
+  } catch (error) {
+    if (!isUndefinedPostgresColumn(error)) throw error;
+    logger.warn(
+      { kind: 'schema_fallback', table: 'leads', missing: 'social_listener_columns' },
+      'Postgres leads table is missing social listener columns; using legacy insert'
+    );
+  }
+
+  const legacyInsert = `
+    INSERT INTO leads (
+      organization_id, source_type, source_id, source_name, sender_number, sender_name,
+      raw_message, detected_language, extracted_data, classifier_confidence, status
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'processing')
+    RETURNING id
+  `;
+  const result = await query(legacyInsert, [
+    tenantConfig.organization_id,
+    safeMsgData.source_type,
+    safeMsgData.source_id,
+    safeMsgData.source_name,
+    safeMsgData.sender_number,
+    safeMsgData.sender_name,
+    safeMsgData.raw_message,
+    language,
+    JSON.stringify(extracted_data),
+    confidence
+  ]);
+  return result.rows[0].id;
+};
+
+const insertLocalLead = (safeMsgData, classification) => {
+  const { language, extracted_data, confidence } = classification;
+  const missingDetailsJson = classification.missing_critical_details && classification.missing_critical_details.length > 0
+    ? JSON.stringify(classification.missing_critical_details) : null;
+
+  const insertStmt = db.prepare(`
+    INSERT INTO leads (
+      source_type, source_id, source_name, source_platform, source_channel, source_group_name,
+      external_message_id, sender_external_id, received_at, contactability_status, metadata,
+      sender_number, sender_name, raw_message, detected_language, location, check_in, check_out,
+      guests, budget, special_notes, missing_details, classifier_confidence, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing')
+  `);
+
+  const result = insertStmt.run(
+    safeMsgData.source_type,
+    safeMsgData.source_id,
+    safeMsgData.source_name,
+    safeMsgData.source_platform,
+    safeMsgData.source_channel,
+    safeMsgData.source_group_name,
+    safeMsgData.external_message_id,
+    safeMsgData.sender_external_id,
+    safeMsgData.received_at,
+    safeMsgData.contactability_status,
+    JSON.stringify(safeMsgData.metadata || {}),
+    safeMsgData.sender_number,
+    safeMsgData.sender_name,
+    safeMsgData.raw_message,
+    language,
+    extracted_data.location,
+    extracted_data.check_in,
+    extracted_data.check_out,
+    extracted_data.guests ? String(extracted_data.guests) : null,
+    extracted_data.budget,
+    extracted_data.special_notes,
+    missingDetailsJson,
+    confidence
+  );
+  return result.lastInsertRowid;
+};
 
 // Robust keyword and heuristic filter to save LLM tokens
 const isLikelyLeadRequest = (text) => {
@@ -49,36 +162,75 @@ export const processMessage = async (msgData, tenantConfig = null) => {
   const requestId = randomUUID();
   const isSaaS = tenantConfig !== null;
   const logPrefix = isSaaS ? `[Tenant: ${tenantConfig.organization_name}]` : '[Local StayEZ]';
-  logger.info({ request_id: requestId, kind: 'request_start', sender_number: msgData.sender_number }, `${logPrefix} Processing new message`);
+  let safeMsgData = null;
   
   try {
-    const safeMessage = validateInboundMessage(msgData.raw_message);
-    const safeMsgData = { ...msgData, raw_message: safeMessage };
+    const normalizedMsgData = normalizeInboundMessage(msgData, tenantConfig);
+    safeMsgData = normalizedMsgData;
+    logger.info(
+      {
+        request_id: requestId,
+        kind: 'request_start',
+        source_platform: normalizedMsgData.source_platform,
+        source_channel: normalizedMsgData.source_channel,
+        external_message_id: normalizedMsgData.external_message_id,
+        sender_number: normalizedMsgData.sender_number,
+        contactability_status: normalizedMsgData.contactability_status
+      },
+      `${logPrefix} Processing new message`
+    );
+
+    const claim = await claimInboundMessage(normalizedMsgData, tenantConfig);
+    if (!claim.claimed) {
+      logger.info(
+        { request_id: requestId, kind: 'message_ignored', reason: 'duplicate_message' },
+        `${logPrefix} Duplicate inbound message ignored`
+      );
+      return;
+    }
+
+    const safeMessage = validateInboundMessage(normalizedMsgData.raw_message);
+    safeMsgData = { ...normalizedMsgData, raw_message: safeMessage };
+
+    // Fetch real profile name from Meta if missing
+    if ((safeMsgData.source_platform === 'instagram' || safeMsgData.source_platform === 'facebook') && safeMsgData.sender_name === 'Unknown') {
+      try {
+        const realName = await fetchMetaProfile(safeMsgData.sender_external_id, tenantConfig);
+        if (realName) safeMsgData.sender_name = realName;
+      } catch (err) {
+        logger.warn({ kind: 'profile_fetch_error', error: err.message }, 'Could not fetch Meta profile name');
+      }
+    }
+
     const lower = safeMsgData.raw_message.toLowerCase();
 
     // 0. Pre-filter
     if (isSaaS) {
       if (tenantConfig.keyword_blacklist && tenantConfig.keyword_blacklist.some(k => lower.includes(k.toLowerCase()))) {
         logger.info({ request_id: requestId, kind: 'message_ignored', reason: 'blacklist_filter' }, `${logPrefix} Message ignored by tenant blacklist`);
+        await markInboundMessageStatus(safeMsgData, 'ignored_blacklist', { tenantConfig });
         return;
       }
       if (tenantConfig.keyword_whitelist && tenantConfig.keyword_whitelist.length > 0) {
         if (!tenantConfig.keyword_whitelist.some(k => lower.includes(k.toLowerCase()))) {
           logger.info({ request_id: requestId, kind: 'message_ignored', reason: 'whitelist_filter' }, `${logPrefix} Message ignored (no whitelist match)`);
+          await markInboundMessageStatus(safeMsgData, 'ignored_whitelist', { tenantConfig });
           return;
         }
       }
     } else {
       if (!isLikelyLeadRequest(safeMsgData.raw_message)) {
         logger.info({ request_id: requestId, kind: 'message_ignored', reason: 'keyword_filter' }, `${logPrefix} Message ignored by keyword filter`);
+        await markInboundMessageStatus(safeMsgData, 'ignored_keyword', { tenantConfig });
         return;
       }
     }
 
     // 1. Classify
-    const classification = await runClassifier(safeMsgData.raw_message, tenantConfig || {});
+    const classification = await runClassifier(safeMsgData.raw_message, tenantConfig || {}, safeMsgData);
     if (!classification) {
       logger.debug({ request_id: requestId, kind: 'message_ignored', reason: 'classification' }, `${logPrefix} Message ignored by classifier`);
+      await markInboundMessageStatus(safeMsgData, 'ignored_classification', { tenantConfig });
       return;
     }
 
@@ -90,41 +242,11 @@ export const processMessage = async (msgData, tenantConfig = null) => {
     let finalLead;
 
     if (isSaaS) {
-      const { query } = require('../db/pg');
-      const insertQuery = `
-        INSERT INTO leads (
-          organization_id, source_type, source_id, source_name, sender_number, sender_name,
-          raw_message, detected_language, extracted_data, classifier_confidence, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'processing')
-        RETURNING id
-      `;
-      const result = await query(insertQuery, [
-        tenantConfig.organization_id,
-        safeMsgData.source_type, safeMsgData.source_id, safeMsgData.source_name, safeMsgData.sender_number, safeMsgData.sender_name,
-        safeMsgData.raw_message, language, 
-        JSON.stringify(extracted_data), confidence
-      ]);
-      leadId = result.rows[0].id;
+      leadId = await insertSaasLead(safeMsgData, classification, tenantConfig);
     } else {
-      const missingDetailsJson = classification.missing_critical_details && classification.missing_critical_details.length > 0 
-        ? JSON.stringify(classification.missing_critical_details) : null;
-      
-      const insertStmt = db.prepare(`
-        INSERT INTO leads (
-          source_type, source_id, source_name, sender_number, sender_name,
-          raw_message, detected_language, location, check_in, check_out, guests, budget,
-          special_notes, missing_details, classifier_confidence, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing')
-      `);
-      
-      const result = insertStmt.run(
-        safeMsgData.source_type, safeMsgData.source_id, safeMsgData.source_name, safeMsgData.sender_number, safeMsgData.sender_name,
-        safeMsgData.raw_message, language, extracted_data.location, extracted_data.check_in, extracted_data.check_out,
-        extracted_data.guests ? String(extracted_data.guests) : null, extracted_data.budget,
-        extracted_data.special_notes, missingDetailsJson, confidence
-      );
-      leadId = result.lastInsertRowid;
+      leadId = insertLocalLead(safeMsgData, classification);
     }
+    await markInboundMessageStatus(safeMsgData, 'lead_created', { leadId, tenantConfig });
 
     const lead = {
       id: leadId,
@@ -153,7 +275,6 @@ export const processMessage = async (msgData, tenantConfig = null) => {
 
     // 4. Update DB
     if (isSaaS) {
-      const { query } = require('../db/pg');
       const matchedItems = (matchResult && matchResult.matchType === 'direct') ? JSON.stringify(matchResult.properties) : null;
       await query(`
         UPDATE leads SET status = 'ready', matched_items = $1, draft_to_client = $2, draft_to_source = $3, drafts_to_contacts = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5
@@ -190,20 +311,26 @@ export const processMessage = async (msgData, tenantConfig = null) => {
 
     // 6. Finalize DB
     if (isSaaS) {
-      const { query } = require('../db/pg');
       await query("UPDATE leads SET status = 'delivered' WHERE id = $1", [leadId]);
+      await markInboundMessageStatus(safeMsgData, 'delivered', { leadId, tenantConfig });
       logger.info({ request_id: requestId, kind: 'request_complete', lead_id: leadId }, `${logPrefix} Marked lead as delivered in DB`);
     } else {
-      db.prepare('DELETE FROM leads WHERE id = ?').run(leadId);
-      logger.info({ request_id: requestId, kind: 'request_complete', lead_id: leadId }, `${logPrefix} Auto-deleted lead from SQLite database`);
+      db.prepare("UPDATE leads SET status = 'delivered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(leadId);
+      await markInboundMessageStatus(safeMsgData, 'delivered', { leadId, tenantConfig });
+      logger.info({ request_id: requestId, kind: 'request_complete', lead_id: leadId }, `${logPrefix} Marked lead as delivered in local database`);
     }
 
   } catch (error) {
     if (error instanceof GuardrailError) {
       logger.warn({ request_id: requestId, kind: 'guardrail_blocked', reason: error.reason }, `${logPrefix} Message blocked by guardrail`);
+      if (safeMsgData) {
+        await markInboundMessageStatus(safeMsgData, 'blocked_guardrail', { error: error.reason, tenantConfig });
+      }
       return;
     }
     logger.error({ request_id: requestId, kind: 'request_error', error: error.message }, `${logPrefix} Error processing message`);
+    if (safeMsgData) {
+      await markInboundMessageStatus(safeMsgData, 'error', { error: error.message, tenantConfig });
+    }
   }
 };
-

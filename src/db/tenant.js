@@ -1,9 +1,9 @@
-const { query } = require('./pg');
+import { query } from './pg.js';
 
 /**
  * Loads all active tenants on startup.
  */
-async function getActiveTenants() {
+export async function getActiveTenants() {
   const result = await query(
     `SELECT t.*, o.name as organization_name 
      FROM tenant_configs t
@@ -26,7 +26,7 @@ async function getActiveTenants() {
 /**
  * Loads the configuration for a specific tenant based on their WhatsApp session ID.
  */
-async function getTenantConfigBySessionId(waSessionId) {
+export async function getTenantConfigBySessionId(waSessionId) {
   const result = await query(
     `SELECT t.*, o.name as organization_name 
      FROM tenant_configs t
@@ -56,7 +56,7 @@ async function getTenantConfigBySessionId(waSessionId) {
 /**
  * Updates LLM usage for metering
  */
-async function recordLlmUsage(tenantId, agentName, provider, model, tokens, latency, costUsd, routingMode) {
+export async function recordLlmUsage(tenantId, agentName, provider, model, tokens, latency, costUsd, routingMode) {
   await query(
     `INSERT INTO llm_usage_events 
      (organization_id, agent_name, provider, model, input_tokens, output_tokens, total_tokens, latency_ms, estimated_cost_usd, routing_mode)
@@ -75,9 +75,3 @@ async function recordLlmUsage(tenantId, agentName, provider, model, tokens, late
     ]
   );
 }
-
-module.exports = {
-  getActiveTenants,
-  getTenantConfigBySessionId,
-  recordLlmUsage
-};

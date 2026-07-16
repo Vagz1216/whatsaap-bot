@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS tenant_configs (
     telegram_bot_token_secret TEXT NOT NULL,
     telegram_chat_id TEXT NOT NULL,
 
+    -- Meta (Facebook/Instagram) destination
+    meta_access_token_secret TEXT,
+
     -- Inventory source (optional — only for accommodation tenants)
     wc_base_url TEXT,
     wc_consumer_key_secret TEXT,
@@ -47,6 +50,14 @@ CREATE TABLE IF NOT EXISTS leads (
     source_type TEXT NOT NULL,
     source_id TEXT NOT NULL,
     source_name TEXT,
+    source_platform TEXT DEFAULT 'whatsapp',
+    source_channel TEXT,
+    source_group_name TEXT,
+    external_message_id TEXT,
+    sender_external_id TEXT,
+    received_at TIMESTAMP,
+    contactability_status TEXT DEFAULT 'direct_contact_available',
+    metadata JSONB,
     sender_number TEXT NOT NULL,
     sender_name TEXT,
     raw_message TEXT NOT NULL,
@@ -60,6 +71,23 @@ CREATE TABLE IF NOT EXISTS leads (
     drafts_to_contacts JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS inbound_message_events (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    source_platform TEXT NOT NULL,
+    source_channel TEXT,
+    external_message_id TEXT NOT NULL,
+    source_id TEXT,
+    sender_external_id TEXT,
+    raw_message_hash TEXT,
+    status TEXT NOT NULL DEFAULT 'received',
+    lead_id INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+    last_error TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (organization_id, source_platform, external_message_id)
 );
 
 -- Local contacts (generic version of local_hosts)
@@ -131,3 +159,7 @@ INSERT INTO organizations (id, name, slug) VALUES (1, 'StayEZ', 'stayez') ON CON
 
 -- Let's define index for wa_session_id since we will query by it often
 CREATE INDEX IF NOT EXISTS idx_tenant_configs_wa_session_id ON tenant_configs(wa_session_id);
+CREATE INDEX IF NOT EXISTS idx_inbound_message_events_org_status ON inbound_message_events(organization_id, status);
+
+-- Ensure meta_access_token_secret exists in case the table was created before
+ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS meta_access_token_secret TEXT;

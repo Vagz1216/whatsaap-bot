@@ -9,6 +9,21 @@ const __dirname = path.dirname(__filename);
 const dataDir = path.resolve(process.env.DATA_DIR || path.join(__dirname, '../../data'));
 
 const logger = pino({ level: 'silent' });
+const groupNameCache = new Map();
+
+const getGroupName = async (sock, groupJid) => {
+  if (!groupJid) return 'WhatsApp Group';
+  if (groupNameCache.has(groupJid)) return groupNameCache.get(groupJid);
+
+  try {
+    const metadata = await sock.groupMetadata(groupJid);
+    const groupName = metadata?.subject || 'WhatsApp Group';
+    groupNameCache.set(groupJid, groupName);
+    return groupName;
+  } catch (error) {
+    return 'WhatsApp Group';
+  }
+};
 
 export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
   // Handle dual-mode arguments
@@ -41,11 +56,18 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
     }
 
     if (connection === 'close') {
-      console.error(`[Tenant: ${tenantName}] WhatsApp connection closed. Full error details:`, JSON.stringify(lastDisconnect?.error, null, 2));
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      console.error(`[Tenant: ${tenantName}] WhatsApp connection closed. Status Code:`, statusCode);
+      
+      // Stop reconnecting if we get logged out (401) OR if the QR code times out (408)
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 408;
+      
       console.log(`[Tenant: ${tenantName}] WhatsApp connection closed. Reconnecting:`, shouldReconnect);
       if (shouldReconnect) {
-        startMonitor(tenantConfigOrCb, cbIfTenant);
+        // Add a 5 second delay to avoid hammering the servers on other transient errors
+        setTimeout(() => startMonitor(tenantConfigOrCb, cbIfTenant), 5000);
+      } else if (statusCode === 408) {
+        console.log(`[Tenant: ${tenantName}] QR Code generation timed out. Please restart the server when you are ready to scan.`);
       }
     } else if (connection === 'open') {
       console.log(`[Tenant: ${tenantName}] WhatsApp connection opened. Monitoring messages...`);
@@ -75,15 +97,31 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
       const senderNumber = isLid ? `Hidden-ID-${cleanNumber}` : '+' + cleanNumber;
       
       const sourceId = msg.key.remoteJid;
+      const sourceName = isGroup ? await getGroupName(sock, sourceId) : 'Direct Message';
 
       // Only read-only operations here. Pass tenantConfig down to the pipeline.
       await onMessageReceived({
+        source_platform: 'whatsapp',
         source_type: isGroup ? 'group' : 'dm',
+        source_channel: isGroup ? 'whatsapp_group' : 'whatsapp_dm',
         source_id: sourceId,
-        source_name: isGroup ? 'WhatsApp Group' : 'Direct Message',
+        source_name: sourceName,
+        source_group_name: isGroup ? sourceName : null,
+        message_id: msg.key.id,
+        external_message_id: msg.key.id,
+        sender_external_id: senderId,
+        sender_jid: senderId,
         sender_number: senderNumber,
         sender_name: msg.pushName || 'Unknown',
-        raw_message: text
+        raw_message: text,
+        received_at: msg.messageTimestamp
+          ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
+          : new Date().toISOString(),
+        metadata: {
+          remote_jid: msg.key.remoteJid,
+          participant_jid: msg.key.participant || null,
+          is_lid: isLid
+        }
       }, tenantConfig);
     } catch (err) {
       console.error(`[Tenant: ${tenantName}] Error processing message:`, err);

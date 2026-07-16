@@ -14,6 +14,17 @@ const db = new Database(dbPath);
 // Enable WAL mode for better concurrency
 db.pragma('journal_mode = WAL');
 
+const columnExists = (tableName, columnName) => {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  return columns.some((column) => column.name === columnName);
+};
+
+const addColumnIfMissing = (tableName, columnName, definition) => {
+  if (!columnExists(tableName, columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
+};
+
 const initDB = () => {
   db.exec(`
     CREATE TABLE IF NOT EXISTS local_hosts ( 
@@ -35,6 +46,14 @@ const initDB = () => {
       source_type            TEXT NOT NULL CHECK(source_type IN ('group','dm')), 
       source_id              TEXT NOT NULL, 
       source_name            TEXT, 
+      source_platform        TEXT DEFAULT 'whatsapp',
+      source_channel         TEXT,
+      source_group_name      TEXT,
+      external_message_id    TEXT,
+      sender_external_id     TEXT,
+      received_at            DATETIME,
+      contactability_status  TEXT DEFAULT 'direct_contact_available',
+      metadata               TEXT,
       sender_number          TEXT NOT NULL, 
       sender_name            TEXT, 
       raw_message            TEXT NOT NULL, 
@@ -55,7 +74,38 @@ const initDB = () => {
       created_at             DATETIME DEFAULT CURRENT_TIMESTAMP, 
       updated_at             DATETIME DEFAULT CURRENT_TIMESTAMP 
     );
+
+    CREATE TABLE IF NOT EXISTS inbound_message_events (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      organization_id     INTEGER DEFAULT 0,
+      source_platform     TEXT NOT NULL,
+      source_channel      TEXT,
+      external_message_id TEXT NOT NULL,
+      source_id           TEXT,
+      sender_external_id  TEXT,
+      raw_message_hash    TEXT,
+      status              TEXT NOT NULL DEFAULT 'received',
+      lead_id             INTEGER,
+      last_error          TEXT,
+      created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (organization_id, source_platform, external_message_id)
+    );
   `);
+
+  const leadColumns = [
+    ['source_platform', "TEXT DEFAULT 'whatsapp'"],
+    ['source_channel', 'TEXT'],
+    ['source_group_name', 'TEXT'],
+    ['external_message_id', 'TEXT'],
+    ['sender_external_id', 'TEXT'],
+    ['received_at', 'DATETIME'],
+    ['contactability_status', "TEXT DEFAULT 'direct_contact_available'"],
+    ['metadata', 'TEXT']
+  ];
+  for (const [columnName, definition] of leadColumns) {
+    addColumnIfMissing('leads', columnName, definition);
+  }
 };
 
 initDB();

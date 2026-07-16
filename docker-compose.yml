@@ -16,9 +16,15 @@ services:
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_BASEURL: ${LANGFUSE_BASEURL}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN}
+      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
+      ENABLE_WEBHOOK_SERVER: ${ENABLE_WEBHOOK_SERVER:-true}
+      WEBHOOK_PORT: ${WEBHOOK_PORT:-3100}
       DATA_DIR: /app/data
       TZ: ${TZ:-Africa/Nairobi}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${WEBHOOK_PORT:-3100}:3100"
     volumes:
       - stayez_data:/app/data
     restart: unless-stopped

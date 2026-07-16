@@ -1,4 +1,6 @@
-const { Pool } = require('pg');
+import pg from 'pg';
+
+const { Pool } = pg;
 
 // Use Neon PostgreSQL string or fallback to local postgres
 const pool = new Pool({
@@ -9,7 +11,7 @@ const pool = new Pool({
 /**
  * Helper to run a query with parameters
  */
-const query = async (text, params) => {
+export const query = async (text, params) => {
   const start = Date.now();
   try {
     const res = await pool.query(text, params);
@@ -25,7 +27,7 @@ const query = async (text, params) => {
 /**
  * Get a client from the pool (useful for transactions)
  */
-const getClient = async () => {
+export const getClient = async () => {
   const client = await pool.connect();
   const query = client.query.bind(client);
   const release = client.release.bind(client);
@@ -46,8 +48,4 @@ const getClient = async () => {
   return client;
 };
 
-module.exports = {
-  pool,
-  query,
-  getClient
-};
+export { pool };

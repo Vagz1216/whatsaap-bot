@@ -26,12 +26,18 @@ You must output valid JSON ONLY with the following schema:
   "missing_critical_details": string[] // Only include: "location", "check_in", or "bedrooms" if they are entirely missing. Do NOT include budget here.
 }`;
 
-export const runClassifier = async (messageText, tenantConfig = null) => {
+export const runClassifier = async (messageText, tenantConfig = null, sourceContext = {}) => {
   try {
-    const isSaaS = tenantConfig !== null && tenantConfig.classifier_system_prompt;
-    const finalSystemPrompt = isSaaS ? tenantConfig.classifier_system_prompt : systemPrompt;
+    const hasCustomPrompt = tenantConfig !== null && tenantConfig.classifier_system_prompt && tenantConfig.classifier_system_prompt.length > 50;
+    const finalSystemPrompt = hasCustomPrompt ? tenantConfig.classifier_system_prompt : systemPrompt;
+    const contextualMessage = [
+      `[source_platform=${sourceContext.source_platform || 'whatsapp'}]`,
+      `[source_channel=${sourceContext.source_channel || sourceContext.source_type || 'unknown'}]`,
+      `[source_name=${sourceContext.source_name || 'unknown'}]`,
+      messageText
+    ].join('\n');
 
-    const result = await classify(messageText, finalSystemPrompt, tenantConfig || {});
+    const result = await classify(contextualMessage, finalSystemPrompt, tenantConfig || {});
     const parsed = typeof result === 'string' ? JSON.parse(result) : result;
 
     if (parsed.type !== 'STAY_REQUEST' || parsed.confidence < 0.72) {

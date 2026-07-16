@@ -20,4 +20,5 @@ RUN mkdir -p /app/data/wa-auth && chown -R app:app /app
 USER app
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 CMD node scripts/healthcheck.js
+EXPOSE 3100
 CMD ["npm", "start"]

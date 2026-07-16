@@ -1,5 +1,18 @@
 import { searchProperties } from '../stayez/api.js';
 import db from '../db/index.js';
+import { query } from '../db/pg.js';
+
+const findNearbyContacts = async (extractedData, tenantConfig) => {
+  const locationStr = `%${(extractedData.location || '').toLowerCase()}%`;
+  const result = await query(
+    `SELECT name, whatsapp_number, region, sub_area, tags, notes
+     FROM contacts
+     WHERE organization_id = $1 AND (LOWER(region) LIKE $2 OR LOWER(sub_area) LIKE $2)
+     LIMIT 3`,
+    [tenantConfig.organization_id, locationStr]
+  );
+  return result.rows;
+};
 
 export const runMatcher = async (extractedData, tenantConfigOrMissing = {}) => {
   try {
@@ -50,15 +63,25 @@ export const runMatcher = async (extractedData, tenantConfigOrMissing = {}) => {
       };
     }
 
-    // 2. If no match (or WooCommerce unreachable), search local SQLite
-    const locationStr = `%${(extractedData.location || '').toLowerCase()}%`;
-    const nearbyHosts = db.prepare(`
-      SELECT * FROM local_hosts 
-      WHERE LOWER(region) LIKE ? OR LOWER(sub_area) LIKE ?
-      LIMIT 3
-    `).all(locationStr, locationStr);
+    // 2. If no match (or WooCommerce unreachable), search tenant contacts in SaaS,
+    // otherwise use the local SQLite host list.
+    let nearbyHosts = [];
+    if (isSaaS && tenantConfigOrMissing.organization_id) {
+      try {
+        nearbyHosts = await findNearbyContacts(extractedData, tenantConfigOrMissing);
+      } catch (error) {
+        console.warn(`[Matcher] Failed to search tenant contacts: ${error.message}`);
+      }
+    } else {
+      const locationStr = `%${(extractedData.location || '').toLowerCase()}%`;
+      nearbyHosts = db.prepare(`
+        SELECT * FROM local_hosts
+        WHERE LOWER(region) LIKE ? OR LOWER(sub_area) LIKE ?
+        LIMIT 3
+      `).all(locationStr, locationStr);
+    }
 
-    console.log(`[Matcher] SQLite fallback found ${nearbyHosts.length} nearby hosts for "${extractedData.location}"`);
+    console.log(`[Matcher] Fallback found ${nearbyHosts.length} nearby contact(s) for "${extractedData.location}"`);
 
     return {
       matchType: 'nearby',

@@ -6,6 +6,9 @@ const safeDraft = async (prompt, systemPrompt, tenantConfig = {}) => validateDra
 export const runDrafter = async (lead, matchResult, tenantConfig = {}) => {
   const isSaaS = tenantConfig && tenantConfig.drafter_persona;
   const persona = isSaaS ? tenantConfig.drafter_persona : 'You are an assistant for a property broker.';
+  const sourcePlatform = lead.source_platform || 'whatsapp';
+  const sourceChannel = lead.source_channel || lead.source_type || 'unknown';
+  const channelContext = `This lead came from ${sourcePlatform} via ${sourceChannel}. Draft for human review only. If this is a public comment, avoid sharing private pricing or personal data in the public reply.`;
 
   const languageContext = lead.detected_language === 'sw' ? 'Write in warm, natural Swahili.' 
     : lead.detected_language === 'mixed' ? 'Write in a natural mix of English and Swahili (Sheng).' 
@@ -24,7 +27,7 @@ export const runDrafter = async (lead, matchResult, tenantConfig = {}) => {
       const promptClient = `Draft a polite message to the client asking them to clarify their ${missingList}. 
       Their original request was: "${lead.raw_message}".
       Do not ask for budget. Just ask for the missing details naturally.`;
-      const sysClient = `${persona} ${languageContext} Keep it short, helpful, and friendly.`;
+      const sysClient = `${persona} ${languageContext} ${channelContext} Keep it short, helpful, and friendly.`;
 
       result.draft_to_client = {
         to_name: lead.sender_name,
@@ -40,7 +43,7 @@ export const runDrafter = async (lead, matchResult, tenantConfig = {}) => {
       // Draft to Client
       const promptClient = `Draft a message to the client proposing this property: ${prop.name}. Link: ${propLink}. 
       Their original request was: "${lead.raw_message}".`;
-      const sysClient = `${persona} ${languageContext} Keep it concise and friendly.`;
+      const sysClient = `${persona} ${languageContext} ${channelContext} Keep it concise and friendly.`;
       
       result.draft_to_client = {
         to_name: lead.sender_name,
@@ -65,7 +68,7 @@ export const runDrafter = async (lead, matchResult, tenantConfig = {}) => {
       const promptClient = `Draft a short, friendly message to the client saying we are currently checking availability for their request and will get back to them shortly.
       Their original request was: "${lead.raw_message}".
       Do NOT say we have no properties. Just say we are looking into it.`;
-      const sysClient = `${persona} ${languageContext} Keep it short and reassuring.`;
+      const sysClient = `${persona} ${languageContext} ${channelContext} Keep it short and reassuring.`;
 
       result.draft_to_client = {
         to_name: lead.sender_name,
@@ -91,7 +94,7 @@ export const runDrafter = async (lead, matchResult, tenantConfig = {}) => {
       // Scenario B2: No WooCommerce results but we have local hosts to contact
       const promptClient = `Draft a message to the client saying we are checking with our hosts in ${lead.location || 'that area'} and will get back to them shortly.
       Their original request was: "${lead.raw_message}".`;
-      const sysClient = `${persona} ${languageContext} Keep it reassuring.`;
+      const sysClient = `${persona} ${languageContext} ${channelContext} Keep it reassuring.`;
 
       result.draft_to_client = {
         to_name: lead.sender_name,
@@ -116,7 +119,7 @@ export const runDrafter = async (lead, matchResult, tenantConfig = {}) => {
       // No matches at all — genuinely confirmed no availability
       const promptClient = `Draft a message to the client saying we currently don't have available properties matching their request, but we will keep them in mind.
       Their original request was: "${lead.raw_message}".`;
-      const sysClient = `${persona} ${languageContext} Keep it polite.`;
+      const sysClient = `${persona} ${languageContext} ${channelContext} Keep it polite.`;
 
       result.draft_to_client = {
         to_name: lead.sender_name,
