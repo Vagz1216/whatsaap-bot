@@ -1,6 +1,10 @@
 import TelegramBot from 'node-telegram-bot-api';
 import db from '../db/index.js';
-import { sendMetaMessage } from '../agents/meta-sender.js';const botCache = new Map();
+import { sendMetaMessage } from '../agents/meta-sender.js';
+import pino from 'pino';
+
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+const botCache = new Map();
 
 const getBot = (token) => {
   if (botCache.has(token)) return botCache.get(token);
@@ -69,7 +73,7 @@ const getBot = (token) => {
           show_alert: action === 'enroll'
         });
       } catch (error) {
-        console.warn(`[Telegram] Failed to answer callback query: ${error.message}`);
+        logger.warn({ kind: 'telegram_callback_error', error: error.message }, 'Failed to answer callback query');
         await bot.answerCallbackQuery(query.id, { text: `Error: ${error.message.substring(0, 50)}`, show_alert: true }).catch(()=>null);
       }
     });
@@ -154,7 +158,16 @@ Open the TikTok comment or inbox event, match this text: <code>${escapeHtml(snip
 Open the source platform, match this text: <code>${escapeHtml(snippet)}</code>, and send the drafted reply manually.`;
 };
 
-// Retry wrapper for transient network errors (EFATAL, ETIMEDOUT, etc.)
+/**
+ * Retry wrapper for transient network errors (EFATAL, ETIMEDOUT, etc.).
+ * Uses linear backoff: 2s, 4s, 6s.
+ * @param {TelegramBot} bot - The Telegram bot instance
+ * @param {string} chatId - Target chat ID
+ * @param {string} text - Message text
+ * @param {object} options - Telegram message options
+ * @param {number} [maxRetries=3] - Maximum retry attempts
+ * @returns {Promise<object>} Telegram API response
+ */
 const sendWithRetry = async (bot, chatId, text, options, maxRetries = 3) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -168,7 +181,10 @@ const sendWithRetry = async (bot, chatId, text, options, maxRetries = 3) => {
       );
       if (isTransient && attempt < maxRetries) {
         const delay = attempt * 2000; // 2s, 4s backoff
-        console.warn(`[Telegram] Send failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+        logger.warn(
+          { kind: 'telegram_retry', attempt, maxRetries, delay_ms: delay, error: err.message },
+          `Telegram send failed, retrying in ${delay}ms`
+        );
         await new Promise(r => setTimeout(r, delay));
       } else {
         throw err; // Non-transient or final attempt — let caller handle
@@ -184,7 +200,7 @@ export const sendCards = async (lead, tenantConfig = null) => {
   const orgName = isSaaS ? tenantConfig.organization_name : 'Local StayEZ';
 
   if (!token || !chatId) {
-    console.warn(`[Telegram] Bot not configured for ${orgName}. Skipping notification.`);
+    logger.warn({ kind: 'telegram_not_configured', org: orgName }, `Bot not configured for ${orgName}. Skipping notification.`);
     return;
   }
 
@@ -299,7 +315,7 @@ ${instructions}`;
     }
 
   } catch (error) {
-    console.error(`[Telegram] Failed to send cards for ${orgName}: ${error.message}`);
+    logger.error({ kind: 'telegram_send_error', org: orgName, error: error.message }, `Failed to send cards for ${orgName}`);
     throw error;
   }
 };

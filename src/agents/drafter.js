@@ -1,8 +1,30 @@
 import { draft } from '../llm/router.js';
 import { validateDraftMessage } from '../guardrails/index.js';
+import pino from 'pino';
 
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+
+/**
+ * Draft a message through the LLM and validate the output via guardrails.
+ * @param {string} prompt - The drafting prompt
+ * @param {string} systemPrompt - System instructions for the drafter
+ * @param {object} [tenantConfig={}] - Per-tenant configuration
+ * @returns {Promise<string>} Validated draft text
+ */
 const safeDraft = async (prompt, systemPrompt, tenantConfig = {}) => validateDraftMessage(await draft(prompt, systemPrompt, tenantConfig));
 
+/**
+ * Generate draft reply messages for a lead based on match results.
+ * Produces up to 3 types of drafts:
+ * - draft_to_client: The message to send to the person who asked
+ * - draft_to_matched_host: The message to send to the property host (if direct match)
+ * - drafts_to_nearby_hosts: Messages to nearby hosts (if no direct match)
+ *
+ * @param {object} lead - The lead record with raw_message, sender_name, detected_language, etc.
+ * @param {object|null} matchResult - Matcher output: { matchType, properties?, hosts?, wooCommerceError? }
+ * @param {object} [tenantConfig={}] - Per-tenant configuration
+ * @returns {Promise<{draft_to_client: object|null, draft_to_matched_host: object|null, drafts_to_nearby_hosts: object[]}>}
+ */
 export const runDrafter = async (lead, matchResult, tenantConfig = {}) => {
   const isSaaS = tenantConfig && tenantConfig.drafter_persona;
   const persona = isSaaS ? tenantConfig.drafter_persona : 'You are an assistant for a property broker.';
@@ -128,7 +150,7 @@ export const runDrafter = async (lead, matchResult, tenantConfig = {}) => {
       };
     }
   } catch (error) {
-    console.error(`Drafter error: ${error.message}`);
+    logger.error({ kind: 'drafter_error', error: error.message }, 'Drafter failed to generate drafts');
   }
 
   return result;

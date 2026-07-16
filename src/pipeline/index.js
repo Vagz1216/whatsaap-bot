@@ -163,6 +163,7 @@ export const processMessage = async (msgData, tenantConfig = null) => {
   const isSaaS = tenantConfig !== null;
   const logPrefix = isSaaS ? `[Tenant: ${tenantConfig.organization_name}]` : '[Local StayEZ]';
   let safeMsgData = null;
+  const metrics = { t_start: Date.now() };
   
   try {
     const normalizedMsgData = normalizeInboundMessage(msgData, tenantConfig);
@@ -227,7 +228,9 @@ export const processMessage = async (msgData, tenantConfig = null) => {
     }
 
     // 1. Classify
+    metrics.t_classify_start = Date.now();
     const classification = await runClassifier(safeMsgData.raw_message, tenantConfig || {}, safeMsgData);
+    metrics.t_classify_end = Date.now();
     if (!classification) {
       logger.debug({ request_id: requestId, kind: 'message_ignored', reason: 'classification' }, `${logPrefix} Message ignored by classifier`);
       await markInboundMessageStatus(safeMsgData, 'ignored_classification', { tenantConfig });
@@ -257,6 +260,7 @@ export const processMessage = async (msgData, tenantConfig = null) => {
     };
 
     // 3. Match & Draft
+    metrics.t_match_draft_start = Date.now();
     let matchResult = null;
     let drafts = { draft_to_client: null, draft_to_matched_host: null, drafts_to_nearby_hosts: null };
     const hasInventoryApi = isSaaS ? (tenantConfig.wc_base_url && tenantConfig.wc_consumer_key_secret) : !!process.env.WC_BASE_URL;
@@ -272,6 +276,7 @@ export const processMessage = async (msgData, tenantConfig = null) => {
       logger.info({ request_id: requestId, kind: 'matcher_skipped', reason: 'no_inventory_api' }, `${logPrefix} Matcher skipped (no inventory API)`);
       drafts = await runDrafter(lead, { matchType: 'no_api', properties: [] }, tenantConfig || {});
     }
+    metrics.t_match_draft_end = Date.now();
 
     // 4. Update DB
     if (isSaaS) {
@@ -310,14 +315,20 @@ export const processMessage = async (msgData, tenantConfig = null) => {
     logger.info({ request_id: requestId, kind: 'telegram_sent', lead_id: leadId }, `${logPrefix} Successfully processed and sent to Telegram`);
 
     // 6. Finalize DB
+    const pipeline_stage_durations_ms = {
+      classifier: metrics.t_classify_end - metrics.t_classify_start,
+      match_and_draft: metrics.t_match_draft_end - metrics.t_match_draft_start,
+      total: Date.now() - metrics.t_start
+    };
+
     if (isSaaS) {
       await query("UPDATE leads SET status = 'delivered' WHERE id = $1", [leadId]);
       await markInboundMessageStatus(safeMsgData, 'delivered', { leadId, tenantConfig });
-      logger.info({ request_id: requestId, kind: 'request_complete', lead_id: leadId }, `${logPrefix} Marked lead as delivered in DB`);
+      logger.info({ request_id: requestId, kind: 'request_complete', lead_id: leadId, pipeline_stage_durations_ms }, `${logPrefix} Marked lead as delivered in DB`);
     } else {
       db.prepare("UPDATE leads SET status = 'delivered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(leadId);
       await markInboundMessageStatus(safeMsgData, 'delivered', { leadId, tenantConfig });
-      logger.info({ request_id: requestId, kind: 'request_complete', lead_id: leadId }, `${logPrefix} Marked lead as delivered in local database`);
+      logger.info({ request_id: requestId, kind: 'request_complete', lead_id: leadId, pipeline_stage_durations_ms }, `${logPrefix} Marked lead as delivered in local database`);
     }
 
   } catch (error) {

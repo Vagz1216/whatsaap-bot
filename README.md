@@ -6,14 +6,79 @@ The system monitors WhatsApp groups and DMs, detects accommodation requests, sea
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    subgraph Ingress["📥 Ingress Layer"]
+        WA["WhatsApp Monitor\n(Baileys)"]
+        WH["Webhook Server\n(HTTP :3100)"]
+        META["Meta API\n(IG / FB / WA Cloud)"]
+    end
+
+    subgraph Pipeline["🧠 AI Pipeline  (src/pipeline)"]
+        CL["Classifier Agent\n— lead or noise?"]
+        MA["Matcher Agent\n— find inventory"]
+        DR["Drafter Agent\n— write reply"]
+    end
+
+    subgraph LLM["⚡ LLM Router  (src/llm)"]
+        AZ["Azure OpenAI"]
+        GR["Groq"]
+        GE["Gemini"]
+        OR["OpenRouter"]
+    end
+
+    subgraph HITL["👤 Human-in-the-Loop"]
+        TG["Telegram Bot\n— Approve / Reject"]
+        MS["Meta Sender\n— send approved reply"]
+    end
+
+    subgraph Data["💾 Data Layer"]
+        SQ["SQLite\n(local mode)"]
+        PG["Neon PostgreSQL\n(SaaS mode)"]
+    end
+
+    WA -->|raw message| CL
+    WH -->|webhook payload| CL
+    META -.->|subscriptions| WH
+
+    CL -->|"is_lead: true"| MA
+    CL -->|"is_lead: false"| DROP(("🗑️ Drop"))
+
+    MA -->|matched properties| DR
+    MA -.->|WooCommerce API| INV["stayez.co.ke\nInventory"]
+
+    DR -->|draft + lead card| TG
+
+    TG -->|"✅ Approved"| MS
+    TG -->|"❌ Rejected"| DROP2(("🗑️ Drop"))
+
+    MS -->|send reply| META
+
+    CL & MA & DR <-->|LLM calls| LLM
+
+    Pipeline -->|store leads| Data
+
+    style Ingress fill:#1a1a2e,stroke:#e94560,color:#eee
+    style Pipeline fill:#16213e,stroke:#0f3460,color:#eee
+    style LLM fill:#0f3460,stroke:#533483,color:#eee
+    style HITL fill:#1a1a2e,stroke:#e94560,color:#eee
+    style Data fill:#16213e,stroke:#0f3460,color:#eee
+```
+
+### Component Table
+
 | Component | Role |
 | --- | --- |
-| `src/agents/monitor.js` | Maintains the WhatsApp connection and emits candidate messages. |
-| `src/pipeline/index.js` | Filters, classifies, matches, drafts, stores, and sends Telegram cards. |
-| `src/llm/` | Routes LLM calls across Azure OpenAI, Groq, Gemini, and OpenRouter fallbacks. |
-| `src/stayez/api.js` | Queries StayEZ/WooCommerce inventory APIs. |
-| `src/db/index.js` | Stores transient leads and local host records in SQLite. |
-| `src/telegram/index.js` | Sends human-review cards to the broker. |
+| `src/agents/monitor.js` | Maintains the WhatsApp connection via Baileys and emits candidate messages. |
+| `src/adapters/webhook-server.js` | HTTP server receiving Meta (IG/FB/WA Cloud) and TikTok webhook payloads. |
+| `src/pipeline/index.js` | Orchestrator — filters, classifies, matches, drafts, stores, and sends Telegram cards. |
+| `src/llm/router.js` | Routes LLM calls across Azure OpenAI, Groq, Gemini, and OpenRouter with fallback. |
+| `src/stayez/api.js` | Queries StayEZ/WooCommerce inventory APIs for property matching. |
+| `src/db/index.js` | SQLite store for leads and hosts (local mode). |
+| `src/db/pg.js` | Neon PostgreSQL connection (SaaS multi-tenant mode). |
+| `src/db/tenant.js` | Loads per-tenant config (API keys, session IDs, keyword filters) from PostgreSQL. |
+| `src/telegram/index.js` | Sends human-review cards with Approve/Reject buttons to the broker. |
+| `src/agents/meta-sender.js` | Sends approved replies back via the Meta Graph API. |
 
 ## Setup
 
