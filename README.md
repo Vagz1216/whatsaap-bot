@@ -77,6 +77,7 @@ flowchart TD
 | `src/db/index.js` | SQLite store for leads and hosts (local mode). |
 | `src/db/pg.js` | Neon PostgreSQL connection (SaaS multi-tenant mode). |
 | `src/db/tenant.js` | Loads per-tenant config (API keys, session IDs, keyword filters) from PostgreSQL. |
+| `src/ui/dashboard-auth.js` | Verifies dashboard actors and enforces system-owner / tenant role boundaries. |
 | `src/telegram/index.js` | Sends human-review cards with Approve/Reject buttons to the broker. |
 | `src/agents/meta-sender.js` | Sends approved replies back via the Meta Graph API. |
 
@@ -118,6 +119,20 @@ The container stores SQLite and WhatsApp auth state under `DATA_DIR`, which defa
 - **LLM Fallback Chain:** Uses a 5-level fallback chain (Azure OpenAI, Groq, Gemini, OpenRouter, Ollama) for high availability.
 - **Property Matching:** Queries the live `stayez.co.ke` WooCommerce inventory via REST APIs.
 - **Telegram Notifications:** Sends drafted messages securely to the broker via Telegram cards.
+- **Operations Dashboard:** Visit `/admin` or `/tenant` on the webhook server to review tenants, leads, contacts, drafts, usage, and configuration.
+- **Dashboard Auth & Tenant Isolation:** Set `CLERK_JWKS_URL` to require verified Clerk session JWTs. `PLATFORM_OWNER_EMAILS` users can access admin APIs; tenant users are scoped through `organization_users` and only see organizations where they have an active role. Without Clerk, `DASHBOARD_TOKEN` remains available as a local/internal fallback.
+
+## Dashboard Access
+
+For SaaS mode, apply `src/db/schema_pg.sql` so `app_users` and `organization_users` exist, then configure:
+
+```bash
+CLERK_JWKS_URL=https://<your-clerk-domain>/.well-known/jwks.json
+CLERK_SECRET_KEY=sk_test_...
+PLATFORM_OWNER_EMAILS=admin@example.com
+```
+
+Tenant users must have an active `organization_users` row. System owners can use `/admin`; tenant users are blocked from `/api/admin/*` and can only access their assigned `organization_id`.
 
 ## Scripts
 - **Add Local Host:** Manually add a local host to the SQLite database.

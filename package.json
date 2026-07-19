@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "test:leads": "node tests/run-sample-leads.js",
     "add-host": "node scripts/add-host.js",
+    "seed:plans": "node scripts/seed-plans.js",
     "test": "node scripts/smoke-test.js",
     "healthcheck": "node scripts/healthcheck.js"
   },

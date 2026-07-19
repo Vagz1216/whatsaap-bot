@@ -12,6 +12,7 @@ RUN addgroup --system app && adduser --system --ingroup app app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
 COPY src ./src
+COPY public ./public
 COPY scripts ./scripts
 COPY validate-env.js ./validate-env.js
 COPY get-chat-id.js ./get-chat-id.js

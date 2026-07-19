@@ -19,7 +19,11 @@ const requiredFiles = [
   'src/adapters/webhook-server.js',
   'src/adapters/meta.js',
   'src/adapters/tiktok.js',
-  'src/adapters/test.js'
+  'src/adapters/test.js',
+  'src/ui/dashboard-auth.js',
+  'src/ui/dashboard-routes.js',
+  'public/dashboard/index.html',
+  'public/dashboard/app.js'
 ];
 
 for (const file of requiredFiles) {

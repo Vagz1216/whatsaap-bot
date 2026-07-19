@@ -3,6 +3,7 @@ import { URL } from 'url';
 import { extractMetaMessages, verifyMetaWebhook } from './meta.js';
 import { extractTikTokMessages, verifyTikTokWebhook } from './tiktok.js';
 import { extractTestMessages } from './test.js';
+import { handleDashboardRoute } from '../ui/dashboard-routes.js';
 import pino from 'pino';
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -69,8 +70,12 @@ export const startWebhookServer = ({ dispatchMessage, resolveTenant }) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const route = routeConfig[url.pathname];
 
+    if (await handleDashboardRoute(req, res, url)) {
+      return;
+    }
+
     if (url.pathname === '/health') {
-      sendJson(res, 200, { status: 'ok', component: 'social-listener-webhook' });
+      sendJson(res, 200, { status: 'ok', component: 'social-listener-webhook', dashboard: 'enabled' });
       return;
     }
 

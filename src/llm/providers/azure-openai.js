@@ -2,24 +2,29 @@ import { OpenAI } from 'openai';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const isConfigured = Boolean(
-  process.env.AZURE_OPENAI_API_KEY &&
-  process.env.AZURE_OPENAI_ENDPOINT &&
-  process.env.AZURE_OPENAI_DEPLOYMENT_NAME
-);
+const makeClient = (options = {}) => {
+  const apiKey = options.api_key || process.env.AZURE_OPENAI_API_KEY;
+  const endpoint = options.azure_endpoint || process.env.AZURE_OPENAI_ENDPOINT;
+  const deployment = options.azure_deployment || options.model || process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
+  const apiVersion = options.azure_api_version || process.env.AZURE_OPENAI_API_VERSION || '2023-12-01-preview';
+  if (!apiKey || !endpoint || !deployment) return null;
+  return {
+    deployment,
+    client: new OpenAI({
+      apiKey,
+      baseURL: `${endpoint.replace(/\/$/, '')}/openai/deployments/${deployment}`,
+      defaultQuery: { 'api-version': apiVersion },
+      defaultHeaders: { 'api-key': apiKey }
+    })
+  };
+};
 
-const client = isConfigured ? new OpenAI({
-  apiKey: process.env.AZURE_OPENAI_API_KEY,
-  baseURL: `${process.env.AZURE_OPENAI_ENDPOINT}/openai/deployments/${process.env.AZURE_OPENAI_DEPLOYMENT_NAME}`,
-  defaultQuery: { 'api-version': '2023-12-01-preview' },
-  defaultHeaders: { 'api-key': process.env.AZURE_OPENAI_API_KEY }
-}) : null;
+export const callAzureOpenAI = async (prompt, systemPrompt, isJson = false, model = null, credential = {}) => {
+  const resolved = makeClient({ ...credential, model });
+  if (!resolved) throw new Error("Azure OpenAI not configured");
 
-export const callAzureOpenAI = async (prompt, systemPrompt, isJson = false) => {
-  if (!client) throw new Error("Azure OpenAI not configured");
-
-  const response = await client.chat.completions.create({
-    model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-35-turbo',
+  const response = await resolved.client.chat.completions.create({
+    model: resolved.deployment,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: prompt }

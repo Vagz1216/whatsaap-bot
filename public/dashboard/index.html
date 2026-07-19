@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>StayEZ Operations</title>
+    <link rel="stylesheet" href="/dashboard/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">S</span>
+          <div>
+            <strong>StayEZ Ops</strong>
+            <small>Lead intelligence</small>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-view="admin" type="button">
+            <span class="icon">A</span>
+            Admin control
+          </button>
+          <button class="nav-item" data-view="tenant" type="button">
+            <span class="icon">T</span>
+            Tenant workspace
+          </button>
+          <button class="nav-item" data-view="leads" type="button">
+            <span class="icon">L</span>
+            Lead review
+          </button>
+          <button class="nav-item" data-view="settings" type="button">
+            <span class="icon">C</span>
+            Configuration
+          </button>
+          <button class="nav-item" data-view="plans" type="button">
+            <span class="icon">P</span>
+            Plans
+          </button>
+          <button class="nav-item" data-view="usage" type="button">
+            <span class="icon">U</span>
+            Usage
+          </button>
+          <button class="nav-item" data-view="organization" type="button">
+            <span class="icon">O</span>
+            Organization
+          </button>
+          <button class="nav-item" data-view="llm" type="button">
+            <span class="icon">K</span>
+            LLM keys
+          </button>
+          <button class="nav-item" data-view="compliance" type="button">
+            <span class="icon">R</span>
+            Compliance
+          </button>
+        </nav>
+        <div class="side-panel">
+          <small>System posture</small>
+          <strong id="modeLabel">Loading</strong>
+          <span id="healthLabel">Waiting for data</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Operational cockpit</p>
+            <h1 id="pageTitle">Admin control</h1>
+          </div>
+          <div class="topbar-actions">
+            <select id="tenantSelect" aria-label="Select tenant"></select>
+            <button class="ghost-button" id="tokenButton" type="button">Auth token</button>
+            <button class="primary-button" id="refreshButton" type="button">Refresh</button>
+          </div>
+        </header>
+
+        <section class="token-panel hidden" id="tokenPanel">
+          <label for="dashboardToken">Dashboard or Clerk token</label>
+          <div class="inline-form">
+            <input id="dashboardToken" type="password" autocomplete="off" placeholder="Paste DASHBOARD_TOKEN or a Clerk session JWT">
+            <button class="primary-button" id="saveTokenButton" type="button">Save</button>
+          </div>
+        </section>
+
+        <section class="view active" id="adminView">
+          <div class="metric-grid" id="adminMetrics"></div>
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Organizations</h2>
+                  <p>Tenant estate, plan coverage, and lead volume.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Organization</th>
+                      <th>Status</th>
+                      <th>Plan</th>
+                      <th>Leads</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="organizationsTable"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Add tenant</h2>
+                  <p>Create the organization and required chatbot configuration.</p>
+                </div>
+              </div>
+              <form class="form-grid" id="organizationForm">
+                <label>Organization name<input name="name" required placeholder="Kilimani Stays"></label>
+                <label>Slug<input name="slug" required placeholder="kilimani-stays"></label>
+                <label class="wide">Owner email<input name="owner_email" required type="email" placeholder="owner@example.com"></label>
+                <label>WhatsApp session<input name="wa_session_id" required placeholder="kilimani_main"></label>
+                <label>Timezone<input name="timezone" value="Africa/Nairobi"></label>
+                <label>Subscription plan<select name="plan_id" id="newTenantPlanSelect" required></select></label>
+                <label>Subscription status
+                  <select name="subscription_status">
+                    <option value="TRIALING">TRIALING</option>
+                    <option value="ACTIVE">ACTIVE</option>
+                  </select>
+                </label>
+                <label>Telegram bot token<input name="telegram_bot_token_secret" required type="password"></label>
+                <label>Telegram chat ID<input name="telegram_chat_id" required></label>
+                <label class="wide">Meta access token<input name="meta_access_token_secret" type="password" placeholder="Facebook/Instagram page token"></label>
+                <label class="wide">WooCommerce URL<input name="wc_base_url" placeholder="https://example.com"></label>
+                <label>WooCommerce key<input name="wc_consumer_key_secret" type="password"></label>
+                <label>WooCommerce secret<input name="wc_consumer_secret_secret" type="password"></label>
+                <label class="wide">Drafter persona<textarea name="drafter_persona" rows="3">You are a concise, helpful sales assistant.</textarea></label>
+                <button class="primary-button wide" type="submit">Create tenant</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="tenantView">
+          <div class="metric-grid" id="tenantMetrics"></div>
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Lead flow</h2>
+                  <p>Recent captured requests, drafting state, and contactability.</p>
+                </div>
+              </div>
+              <div class="lead-list" id="tenantLeadList"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Add contact</h2>
+                  <p>Manual contacts used for matching and host outreach.</p>
+                </div>
+              </div>
+              <form class="form-grid" id="contactForm">
+                <input type="hidden" name="organization_id" id="contactOrganizationId">
+                <label>Name<input name="name" required placeholder="Mary Host"></label>
+                <label>WhatsApp number<input name="whatsapp_number" required placeholder="2547..."></label>
+                <label>Region<input name="region" placeholder="Nairobi"></label>
+                <label>Sub area<input name="sub_area" placeholder="Kilimani"></label>
+                <label class="wide">Tags<input name="tags" placeholder="studio, 1BR, furnished"></label>
+                <label class="wide">Notes<textarea name="notes" rows="3" placeholder="Availability, pricing, or owner preferences"></textarea></label>
+                <button class="primary-button wide" type="submit">Save contact</button>
+              </form>
+              <div class="compact-list" id="contactsList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="leadsView">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Lead review queue</h2>
+                <p>Inspect extracted details, matched inventory, and generated drafts before follow-up.</p>
+              </div>
+              <div class="segmented" id="statusFilter">
+                <button class="active" data-status="all" type="button">All</button>
+                <button data-status="ready" type="button">Ready</button>
+                <button data-status="delivered" type="button">Delivered</button>
+                <button data-status="archived" type="button">Archived</button>
+              </div>
+            </div>
+            <div class="lead-board" id="leadBoard"></div>
+          </section>
+        </section>
+
+        <section class="view" id="settingsView">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Tenant routing</h2>
+                  <p>Control model routing, language, inventory, and lead filters.</p>
+                </div>
+              </div>
+              <form class="form-grid" id="configForm">
+                <label>Routing mode
+                  <select name="llm_routing_mode">
+                    <option value="balanced">Balanced</option>
+                    <option value="cost_optimized">Cost optimized</option>
+                    <option value="quality_first">Quality first</option>
+                  </select>
+                </label>
+                <label>Default language<input name="default_language" value="en"></label>
+                <label class="wide">WooCommerce URL<input name="wc_base_url"></label>
+                <label>WooCommerce key<input name="wc_consumer_key_secret" type="password" placeholder="Leave blank to keep current key"></label>
+                <label>WooCommerce secret<input name="wc_consumer_secret_secret" type="password" placeholder="Leave blank to keep current secret"></label>
+                <label class="wide">Meta access token<input name="meta_access_token_secret" type="password" placeholder="Leave blank to keep current token"></label>
+                <label class="wide">Keyword whitelist<input name="keyword_whitelist" placeholder="stay, room, airbnb"></label>
+                <label class="wide">Keyword blacklist<input name="keyword_blacklist" placeholder="job, vacancy, sale"></label>
+                <label class="wide">Drafter persona<textarea name="drafter_persona" rows="5"></textarea></label>
+                <button class="primary-button wide" type="submit">Update configuration</button>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Usage signal</h2>
+                  <p>Thirty-day LLM usage and reliability telemetry.</p>
+                </div>
+              </div>
+              <div class="usage-panel" id="usagePanel"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="plansView">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Subscription plans</h2>
+                  <p>Plan limits, routing entitlements, BYOK posture, and tenant assignment.</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Plan</th>
+                      <th>Price</th>
+                      <th>Credits</th>
+                      <th>Routing</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="plansTable"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Create plan</h2>
+                  <p>System-owner plan setup for subscription control.</p>
+                </div>
+              </div>
+              <form class="form-grid" id="planForm">
+                <label>Name<input name="name" required placeholder="Growth"></label>
+                <label>Slug<input name="slug" placeholder="growth"></label>
+                <label>Monthly price cents<input name="monthly_price_cents" type="number" min="0" value="0"></label>
+                <label>Trial days<input name="trial_days" type="number" min="0" value="14"></label>
+                <label>AI credits<input name="max_monthly_ai_credits" type="number" min="1" placeholder="10000"></label>
+                <label>Messages<input name="max_monthly_messages" type="number" min="1" placeholder="5000"></label>
+                <label>Default routing
+                  <select name="default_llm_routing_mode">
+                    <option value="cost_optimized">Cost optimized</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="quality_first">Quality first</option>
+                  </select>
+                </label>
+                <label>BYOK
+                  <select name="allow_byok">
+                    <option value="false">Disabled</option>
+                    <option value="true">Enabled</option>
+                  </select>
+                </label>
+                <label class="wide">Description<textarea name="description" rows="3"></textarea></label>
+                <button class="primary-button wide" type="submit">Create plan</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="usageView">
+          <div class="metric-grid" id="usageMetrics"></div>
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Usage ledger</h2>
+                <p>Tenant AI credits, model spend, latency, and fallback pressure.</p>
+              </div>
+            </div>
+            <div class="usage-panel" id="usageDetailPanel"></div>
+          </section>
+        </section>
+
+        <section class="view" id="organizationView">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Organization profile</h2>
+                  <p>Tenant status, timezone, subscription, and access scope.</p>
+                </div>
+              </div>
+              <form class="form-grid" id="organizationEditForm">
+                <label>Name<input name="name" required></label>
+                <label>Slug<input name="slug" required></label>
+                <label>Timezone<input name="timezone" value="Africa/Nairobi"></label>
+                <label>Status
+                  <select name="status">
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="SUSPENDED">SUSPENDED</option>
+                    <option value="ARCHIVED">ARCHIVED</option>
+                  </select>
+                </label>
+                <label class="wide">Plan
+                  <select name="plan_id" id="organizationPlanSelect"></select>
+                </label>
+                <button class="primary-button wide" type="submit">Save organization</button>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Members</h2>
+                  <p>Tenant role assignments and operational access.</p>
+                </div>
+              </div>
+              <form class="form-grid" id="memberForm">
+                <label class="wide">Email<input name="email" required type="email" placeholder="operator@example.com"></label>
+                <label>Role
+                  <select name="role">
+                    <option value="org_admin">Org admin</option>
+                    <option value="sales_manager">Sales manager</option>
+                    <option value="sales_user">Sales user</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                </label>
+                <label>Status
+                  <select name="status">
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="INVITED">INVITED</option>
+                    <option value="DISABLED">DISABLED</option>
+                  </select>
+                </label>
+                <button class="primary-button wide" type="submit">Save member</button>
+              </form>
+              <div class="compact-list" id="membersList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="llmView">
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Organization LLM keys</h2>
+                  <p>BYOK credential inventory. Secret values are write-only.</p>
+                </div>
+              </div>
+              <div class="compact-list" id="llmPolicyPanel"></div>
+              <div class="compact-list" id="llmCredentialsList"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Add key</h2>
+                  <p>Store tenant-owned provider credentials for eligible plans.</p>
+                </div>
+              </div>
+              <form class="form-grid" id="llmCredentialForm">
+                <label>Provider
+                  <select name="provider" id="llmProviderSelect">
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="groq">Groq</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="azure_openai">Azure OpenAI</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="cerebras">Cerebras</option>
+                  </select>
+                </label>
+                <label>Label<input name="label" id="llmCredentialLabel" placeholder="Tenant production key"></label>
+                <label class="wide" id="llmApiKeyLabel">API key<input name="api_key_secret" required type="password" autocomplete="off"></label>
+                <label class="wide hidden" id="llmBaseUrlLabel">Base URL<input name="base_url" placeholder="OpenAI-compatible base URL"></label>
+                <label class="hidden" id="llmAzureEndpointLabel">Azure endpoint<input name="azure_endpoint" placeholder="https://resource.openai.azure.com"></label>
+                <label class="hidden" id="llmAzureDeploymentLabel">Azure deployment<input name="azure_deployment" placeholder="deployment name"></label>
+                <label class="hidden" id="llmAzureApiVersionLabel">Azure API version<input name="azure_api_version" placeholder="2023-12-01-preview"></label>
+                <label class="wide" id="llmDefaultModelLabel">Default model<input name="default_model" placeholder="provider model id"></label>
+                <button class="primary-button wide" type="submit">Save key</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="complianceView">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Compliance events</h2>
+                <p>Plan, organization, user, credential, and workflow administration history.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Organization</th>
+                    <th>Actor</th>
+                    <th>Metadata</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody id="complianceTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="leadDialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">Lead dossier</p>
+          <h2 id="dialogTitle">Lead</h2>
+        </div>
+        <button class="icon-button" id="closeDialogButton" type="button" aria-label="Close">x</button>
+      </div>
+      <div id="dialogBody"></div>
+    </dialog>
+
+    <div class="toast" id="toast"></div>
+    <script type="module" src="/dashboard/app.js"></script>
+  </body>
+</html>

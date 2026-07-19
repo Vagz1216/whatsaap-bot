@@ -2,17 +2,19 @@ import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 dotenv.config();
 
-export const callOpenRouter = async (prompt, systemPrompt, isJson = false, model = 'meta-llama/llama-4-scout:free') => {
-  if (!process.env.OPENROUTER_API_KEY) throw new Error("OpenRouter not configured");
+export const callOpenRouter = async (prompt, systemPrompt, isJson = false, model = 'meta-llama/llama-4-scout:free', credential = {}) => {
+  const apiKey = credential.api_key || process.env.OPENROUTER_API_KEY;
+  const baseUrl = credential.base_url || "https://openrouter.ai/api/v1";
+  if (!apiKey) throw new Error("OpenRouter not configured");
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model,
+      model: credential.default_model || model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
