@@ -120,17 +120,21 @@ The container stores SQLite and WhatsApp auth state under `DATA_DIR`, which defa
 - **Property Matching:** Queries the live `stayez.co.ke` WooCommerce inventory via REST APIs.
 - **Telegram Notifications:** Sends drafted messages securely to the broker via Telegram cards.
 - **Operations Dashboard:** Visit `/admin` or `/tenant` on the webhook server to review tenants, leads, contacts, drafts, usage, and configuration.
-- **Dashboard Auth & Tenant Isolation:** Set `CLERK_JWKS_URL` to require verified Clerk session JWTs. `PLATFORM_OWNER_EMAILS` users can access admin APIs; tenant users are scoped through `organization_users` and only see organizations where they have an active role. Without Clerk, `DASHBOARD_TOKEN` remains available as a local/internal fallback.
+- **Dashboard Auth & Tenant Isolation:** Production dashboard API access should use verified Clerk JWTs. `PLATFORM_OWNER_EMAILS` users can access admin APIs; tenant users are scoped through `organization_users` and only see organizations where they have an active role. `DASHBOARD_TOKEN` is a local/internal fallback only when Clerk is not configured.
 
 ## Dashboard Access
 
 For SaaS mode, apply `src/db/schema_pg.sql` so `app_users` and `organization_users` exist, then configure:
 
 ```bash
+DASHBOARD_REQUIRE_AUTH=true
 CLERK_JWKS_URL=https://<your-clerk-domain>/.well-known/jwks.json
-CLERK_SECRET_KEY=sk_test_...
+CLERK_JWT_ISSUER=https://<your-clerk-domain>
+CLERK_SECRET_KEY=<from Clerk dashboard>
 PLATFORM_OWNER_EMAILS=admin@example.com
 ```
+
+The backend validates Clerk tokens, but it does not create Clerk sessions. The deployed dashboard/client must send `Authorization: Bearer <Clerk session token>` on API requests. If `CLERK_JWKS_URL` is not set, the API falls back to `DASHBOARD_TOKEN`; use that only for local/internal testing.
 
 Tenant users must have an active `organization_users` row. System owners can use `/admin`; tenant users are blocked from `/api/admin/*` and can only access their assigned `organization_id`.
 

@@ -31,11 +31,13 @@ This bot itself does not need a public web port because it is a background worke
 
 Set these in Coolify as secrets or environment variables:
 
-- `WC_BASE_URL`
-- `WC_CONSUMER_KEY`
-- `WC_CONSUMER_SECRET`
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
+- `DATABASE_URL` for Neon PostgreSQL SaaS mode.
+- `DASHBOARD_REQUIRE_AUTH=true`
+- `CLERK_JWKS_URL`
+- `CLERK_JWT_ISSUER`
+- `CLERK_SECRET_KEY`
+- `PLATFORM_OWNER_EMAILS`
+- `SECRET_ENCRYPTION_KEY`
 - At least one LLM provider:
   - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_NAME`
   - `GROQ_API_KEY`
@@ -44,11 +46,16 @@ Set these in Coolify as secrets or environment variables:
 
 Optional:
 
+- `ORGANIZATION_LLM_KEYS_ENABLED=true`
 - `LANGFUSE_SECRET_KEY`
 - `LANGFUSE_PUBLIC_KEY`
 - `LANGFUSE_BASEURL`
 - `TZ`
 - `LOG_LEVEL`
+
+Do not use `DASHBOARD_TOKEN` as production auth. It is only a local/internal fallback when Clerk is not configured. With Clerk enabled, the dashboard/client must send `Authorization: Bearer <Clerk session token>` to API requests.
+
+Do not set global `WC_BASE_URL`, `WC_CONSUMER_KEY`, `WC_CONSUMER_SECRET`, `TELEGRAM_BOT_TOKEN`, or `TELEGRAM_CHAT_ID` for SaaS unless you intentionally need local-mode fallback behavior. Tenant-specific values live in Neon.
 
 ## Persistent Storage
 
@@ -62,18 +69,18 @@ volumes:
 This must stay persistent between deployments. It stores:
 
 - WhatsApp auth session files under `/app/data/wa-auth`
-- SQLite database files under `/app/data`
+- SQLite database files under `/app/data` only when running local mode without `DATABASE_URL`
 
 If this volume is deleted, the bot will need WhatsApp QR authentication again and any local host records in SQLite will be lost.
 
 ## First Deploy Checklist
 
 - Confirm all required environment variables are set.
-- Run `npm run healthcheck` locally or in the deployed container after setting secrets.
+- Run the container healthcheck after setting secrets.
 - Deploy from `main`.
 - Watch logs until the WhatsApp QR code appears.
 - Scan the QR code with the broker WhatsApp account.
-- Confirm logs show `WhatsApp connection opened. Monitoring messages...`.
+- Confirm logs show active tenants loaded and the webhook server listening.
 - Send a test WhatsApp message that looks like a stay request.
 - Confirm the Telegram bot sends lead cards.
 
@@ -86,7 +93,7 @@ If this volume is deleted, the bot will need WhatsApp QR authentication again an
 
 ## Production Controls Already Included
 
-- Startup fails when required credentials are missing or still set to placeholder values.
+- SaaS startup loads active tenants from Neon when `DATABASE_URL` is set.
 - The app only uses Azure OpenAI when the API key, endpoint, and deployment name are all present.
 - Suspicious prompt-injection messages are blocked before reaching the LLM.
 - Drafts are blocked if they contain secret-like values or internal prompt/policy wording.
@@ -95,7 +102,6 @@ If this volume is deleted, the bot will need WhatsApp QR authentication again an
 
 ## Not Yet Production-Hardened
 
-- There is no public HTTP `/health` endpoint because this is currently a worker.
-- SQLite is suitable for one worker, not horizontal scaling.
+- Keep replicas at `1` while WhatsApp session ownership is file-based.
 - More prompt-injection and output guardrail test cases should be added before high-volume production use.
 - Database migrations are not versioned yet.
