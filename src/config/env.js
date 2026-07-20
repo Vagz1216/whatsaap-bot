@@ -31,7 +31,7 @@ export const validateEnv = () => {
   const hasCompleteAzure = Boolean(
     process.env.AZURE_OPENAI_API_KEY &&
     process.env.AZURE_OPENAI_ENDPOINT &&
-    process.env.AZURE_OPENAI_DEPLOYMENT_NAME
+    (process.env.AZURE_OPENAI_DEPLOYMENT_NAME || process.env.AZURE_OPENAI_DEPLOYMENT)
   );
   const hasLlmProvider = hasCompleteAzure || ['GROQ_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY'].some((name) => Boolean(process.env[name]));
 

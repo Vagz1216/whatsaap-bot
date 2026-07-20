@@ -5,7 +5,7 @@ dotenv.config();
 const makeClient = (options = {}) => {
   const apiKey = options.api_key || process.env.AZURE_OPENAI_API_KEY;
   const endpoint = options.azure_endpoint || process.env.AZURE_OPENAI_ENDPOINT;
-  const deployment = options.azure_deployment || options.model || process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
+  const deployment = options.azure_deployment || options.model || process.env.AZURE_OPENAI_DEPLOYMENT_NAME || process.env.AZURE_OPENAI_DEPLOYMENT;
   const apiVersion = options.azure_api_version || process.env.AZURE_OPENAI_API_VERSION || '2023-12-01-preview';
   if (!apiKey || !endpoint || !deployment) return null;
   return {

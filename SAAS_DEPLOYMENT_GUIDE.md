@@ -24,9 +24,12 @@ The backend validates Clerk JWTs; it does not create Clerk browser sessions. The
 *These keys are used by the fallback router to process AI requests for all tenants.*
 *   `AZURE_OPENAI_API_KEY`: Your global Azure key.
 *   `AZURE_OPENAI_ENDPOINT`: Your global Azure endpoint.
+*   `AZURE_OPENAI_DEPLOYMENT_NAME`: Your Azure deployment name. `AZURE_OPENAI_DEPLOYMENT` is accepted as a backward-compatible alias.
+*   `AZURE_OPENAI_API_VERSION`: Optional Azure API version override.
 *   `OPENROUTER_API_KEY`: Your OpenRouter key (grants access to free DeepSeek, Qwen, and Gemma models for budget tenants).
 *   `GROQ_API_KEY`: Your Groq API key (grants access to Llama 3 models for ultra-fast fallback).
 *   `GEMINI_API_KEY`: Google Gemini API key.
+*   `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`: Optional OpenAI or OpenAI-compatible fallback.
 
 ### Observability
 *   `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASEURL`: Used to track LLM costs and usage across the platform.

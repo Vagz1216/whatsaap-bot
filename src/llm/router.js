@@ -65,7 +65,7 @@ const executeChain = async (chain, prompt, systemPrompt, isJson) => {
 
     const generation = trace.generation({
       name: step.providerId,
-      model: step.model || process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'default',
+      model: step.model || process.env.AZURE_OPENAI_DEPLOYMENT_NAME || process.env.AZURE_OPENAI_DEPLOYMENT || 'default',
       modelParameters: {
         response_format: isJson ? 'json_object' : 'text',
         billing_source: step.billingSource || 'platform',

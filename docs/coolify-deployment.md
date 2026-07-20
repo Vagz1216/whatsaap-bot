@@ -43,10 +43,12 @@ Set these in Coolify as secrets or environment variables:
   - `GROQ_API_KEY`
   - `GEMINI_API_KEY`
   - `OPENROUTER_API_KEY`
+  - `OPENAI_API_KEY` with optional `OPENAI_BASE_URL`
 
 Optional:
 
 - `ORGANIZATION_LLM_KEYS_ENABLED=true`
+- `AZURE_OPENAI_API_VERSION`
 - `LANGFUSE_SECRET_KEY`
 - `LANGFUSE_PUBLIC_KEY`
 - `LANGFUSE_BASEURL`
@@ -54,6 +56,8 @@ Optional:
 - `LOG_LEVEL`
 
 Do not use `DASHBOARD_TOKEN` as production auth. It is only a local/internal fallback when Clerk is not configured. With Clerk enabled, the dashboard/client must send `Authorization: Bearer <Clerk session token>` to API requests.
+
+`AZURE_OPENAI_DEPLOYMENT` is accepted as a backward-compatible alias, but new deployments should use `AZURE_OPENAI_DEPLOYMENT_NAME`.
 
 Do not set global `WC_BASE_URL`, `WC_CONSUMER_KEY`, `WC_CONSUMER_SECRET`, `TELEGRAM_BOT_TOKEN`, or `TELEGRAM_CHAT_ID` for SaaS unless you intentionally need local-mode fallback behavior. Tenant-specific values live in Neon.
 
