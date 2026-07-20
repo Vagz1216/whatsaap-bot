@@ -24,7 +24,7 @@ The backend validates Clerk JWTs; it does not create Clerk browser sessions. The
 *These keys are used by the fallback router to process AI requests for all tenants.*
 *   `AZURE_OPENAI_API_KEY`: Your global Azure key.
 *   `AZURE_OPENAI_ENDPOINT`: Your global Azure endpoint.
-*   `AZURE_OPENAI_DEPLOYMENT_NAME`: Your Azure deployment name. `AZURE_OPENAI_DEPLOYMENT` is accepted as a backward-compatible alias.
+*   `AZURE_OPENAI_DEPLOYMENT`: Your Azure deployment name, for example `gpt-5.5`. `AZURE_OPENAI_DEPLOYMENT_NAME` is also accepted as a clearer optional alias.
 *   `AZURE_OPENAI_API_VERSION`: Optional Azure API version override.
 *   `OPENROUTER_API_KEY`: Your OpenRouter key (grants access to free DeepSeek, Qwen, and Gemma models for budget tenants).
 *   `GROQ_API_KEY`: Your Groq API key (grants access to Llama 3 models for ultra-fast fallback).

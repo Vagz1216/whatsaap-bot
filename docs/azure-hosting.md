@@ -29,7 +29,7 @@ Set these as Azure secrets or app environment variables:
 - `CLERK_SECRET_KEY` for user enrichment when JWT claims do not include email.
 - `PLATFORM_OWNER_EMAILS` as a comma-separated list of platform admin emails.
 - `SECRET_ENCRYPTION_KEY` as a stable long random value. Do not rotate it casually; encrypted BYOK keys depend on it.
-- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_NAME`
+- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, and an Azure deployment name using either `AZURE_OPENAI_DEPLOYMENT` or `AZURE_OPENAI_DEPLOYMENT_NAME`
 - Optional Azure setting: `AZURE_OPENAI_API_VERSION` if the deployment requires a non-default API version.
 - Optional fallback keys: `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`
 - Optional OpenAI-compatible fallback: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`
@@ -41,7 +41,7 @@ Set these as Azure secrets or app environment variables:
 
 Do not set global `WC_BASE_URL`, `WC_CONSUMER_KEY`, `WC_CONSUMER_SECRET`, `TELEGRAM_BOT_TOKEN`, or `TELEGRAM_CHAT_ID` for SaaS unless you intentionally want local-mode fallback behavior. In SaaS mode those values are stored per tenant in Neon through `tenant_configs`.
 
-`AZURE_OPENAI_DEPLOYMENT` is accepted as a backward-compatible alias, but new deployments should use `AZURE_OPENAI_DEPLOYMENT_NAME`.
+`AZURE_OPENAI_DEPLOYMENT=gpt-5.5` is valid if that is what your current Azure env already uses. `AZURE_OPENAI_DEPLOYMENT_NAME` is only a clearer optional alias accepted by the app.
 
 `DASHBOARD_TOKEN` is not required when Clerk is configured. It is only for local/internal fallback deployments where `CLERK_JWKS_URL` is empty. A Clerk application link by itself is not enough; the deployed dashboard/client must pass a Clerk session JWT to the API as `Authorization: Bearer <token>`.
 
