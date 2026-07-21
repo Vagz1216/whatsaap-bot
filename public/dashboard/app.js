@@ -206,6 +206,51 @@ const loadClerkClient = async (publishableKey) => {
   throw new Error(lastError?.message || 'Could not load Clerk sign-in.');
 };
 
+const startClerkSignIn = async (clerk, signInNode) => {
+  const button = $('#clerkSignInButton');
+  const originalText = button?.textContent || 'Sign In';
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Opening...';
+  }
+
+  try {
+    if (typeof clerk.openSignIn === 'function') {
+      await clerk.openSignIn({
+        routing: 'hash',
+        afterSignInUrl: window.location.href,
+        afterSignUpUrl: window.location.href
+      });
+      return;
+    }
+
+    if (typeof clerk.mountSignIn === 'function' && signInNode) {
+      signInNode.innerHTML = '<div class="clerk-inline-sign-in" id="clerkInlineSignIn"></div>';
+      clerk.mountSignIn($('#clerkInlineSignIn'), {
+        routing: 'hash',
+        afterSignInUrl: window.location.href,
+        afterSignUpUrl: window.location.href
+      });
+      return;
+    }
+
+    if (typeof clerk.redirectToSignIn === 'function') {
+      await clerk.redirectToSignIn({
+        redirectUrl: window.location.href
+      });
+      return;
+    }
+
+    throw new Error('Clerk sign-in APIs are not available.');
+  } catch (error) {
+    showAuthGate(error?.message || 'Could not open Clerk sign-in. Refresh and try again.');
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+};
+
 const renderClerkAuth = async (clerk) => {
   const signInNode = $('#clerkSignIn');
   const userButtonNode = $('#clerkUserButton');
@@ -217,13 +262,7 @@ const renderClerkAuth = async (clerk) => {
       signInNode.innerHTML = `
         <button class="primary-button auth-sign-in-button" id="clerkSignInButton" type="button">Sign In</button>
       `;
-      $('#clerkSignInButton')?.addEventListener('click', () => {
-        clerk.openSignIn({
-          routing: 'hash',
-          afterSignInUrl: window.location.href,
-          afterSignUpUrl: window.location.href
-        });
-      });
+      $('#clerkSignInButton')?.addEventListener('click', () => startClerkSignIn(clerk, signInNode));
     }
     if (userButtonNode) userButtonNode.innerHTML = '';
     return;
