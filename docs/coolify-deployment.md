@@ -36,7 +36,7 @@ Set these in Coolify as secrets or environment variables:
 - `CLERK_JWKS_URL`
 - `CLERK_JWT_ISSUER`
 - `CLERK_SECRET_KEY`
-- `CLERK_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 - `PLATFORM_OWNER_EMAILS`
 - `SECRET_ENCRYPTION_KEY`
 - At least one LLM provider:
@@ -56,7 +56,7 @@ Optional:
 - `TZ`
 - `LOG_LEVEL`
 
-Do not use `DASHBOARD_TOKEN` as production auth. It is only a local/internal fallback when Clerk is not configured. With Clerk enabled, the static dashboard uses `CLERK_PUBLISHABLE_KEY` to sign in and send `Authorization: Bearer <Clerk session token>` to API requests.
+Do not use `DASHBOARD_TOKEN` as production auth. It is only a local/internal fallback when Clerk is not configured. With Clerk enabled, the static dashboard uses `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to sign in and send `Authorization: Bearer <Clerk session token>` to API requests.
 
 `AZURE_OPENAI_DEPLOYMENT=gpt-5.5` is valid if that is what your current Azure env already uses. `AZURE_OPENAI_DEPLOYMENT_NAME` is only a clearer optional alias accepted by the app.
 

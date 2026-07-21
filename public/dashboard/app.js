@@ -52,6 +52,11 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 const fmt = new Intl.NumberFormat('en-US');
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const TENANT_CACHE_TTL_MS = 60_000;
+
+let tokenRefreshPromise = null;
+let tenantCache = null;
+let tenantInflight = null;
 
 const providerUi = {
   openrouter: {
@@ -92,16 +97,45 @@ const providerUi = {
   }
 };
 
-const getAuthToken = async () => {
+const tokenExpiresSoon = (token, skewSeconds = 30) => {
+  const payload = String(token || '').split('.')[1];
+  if (!payload) return false;
+  try {
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const claims = JSON.parse(atob(padded));
+    return typeof claims.exp === 'number' && claims.exp * 1000 <= Date.now() + skewSeconds * 1000;
+  } catch {
+    return false;
+  }
+};
+
+const getFreshClerkToken = async () => {
+  if (!state.auth.clerk?.session) return null;
+  if (!tokenRefreshPromise) {
+    tokenRefreshPromise = state.auth.clerk.session.getToken({ skipCache: true })
+      .finally(() => {
+        tokenRefreshPromise = null;
+      });
+  }
+  return tokenRefreshPromise;
+};
+
+const getAuthToken = async (skipCache = false) => {
   if (state.auth.clerk?.session) {
-    const token = await state.auth.clerk.session.getToken();
+    let token = skipCache
+      ? await getFreshClerkToken()
+      : await state.auth.clerk.session.getToken();
+    if (token && !skipCache && tokenExpiresSoon(token)) {
+      token = await getFreshClerkToken();
+    }
     if (token) return token;
   }
   return state.token;
 };
 
-const authHeaders = async () => {
-  const token = await getAuthToken();
+const authHeaders = async (skipCache = false) => {
+  const token = await getAuthToken(skipCache);
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -116,10 +150,15 @@ const showToast = (message) => {
 };
 
 const api = async (path, options = {}) => {
-  const response = await fetch(path, {
+  const request = async (skipCache = false) => fetch(path, {
     ...options,
-    headers: { ...(await authHeaders()), ...(options.headers || {}) }
+    headers: { ...(await authHeaders(skipCache)), ...(options.headers || {}) }
   });
+
+  let response = await request(false);
+  if (response.status === 401 && state.auth.clerk?.session) {
+    response = await request(true);
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(body.error || `Request failed: ${response.status}`);
@@ -159,6 +198,7 @@ const renderClerkAuth = async (clerk) => {
   const userButtonNode = $('#clerkUserButton');
 
   if (!clerk?.user || !clerk?.session) {
+    $('#tokenPanel')?.classList.add('hidden');
     showAuthGate('Sign in with Clerk to continue.');
     if (signInNode) {
       signInNode.innerHTML = '';
@@ -195,7 +235,7 @@ const initAuth = async () => {
 
   if (config.clerk_enabled && !config.clerk_publishable_key) {
     state.auth.blocked = true;
-    showAuthGate('CLERK_PUBLISHABLE_KEY is missing from the backend environment.');
+    showAuthGate('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is missing from the backend environment.');
     return;
   }
 
@@ -610,7 +650,32 @@ const openLead = (leadId) => {
 };
 
 const loadOrganizations = async () => {
-  const body = await api('/api/me');
+  const cacheKey = state.auth.clerk?.user?.id || state.token || 'anonymous';
+  if (tenantCache?.cacheKey === cacheKey && tenantCache.expiresAt > Date.now()) {
+    const cached = tenantCache.body;
+    state.actor = {
+      user: cached.user,
+      system_owner: Boolean(cached.system_owner),
+      auth_mode: cached.auth_mode,
+      capabilities: cached.capabilities || {}
+    };
+    state.organizations = cached.organizations || [];
+    renderTenantSelect();
+    renderShellAccess();
+    return;
+  }
+
+  if (!tenantInflight) {
+    tenantInflight = api('/api/me').finally(() => {
+      tenantInflight = null;
+    });
+  }
+  const body = await tenantInflight;
+  tenantCache = {
+    cacheKey,
+    expiresAt: Date.now() + TENANT_CACHE_TTL_MS,
+    body
+  };
   state.actor = {
     user: body.user,
     system_owner: Boolean(body.system_owner),
@@ -669,10 +734,11 @@ const refresh = async () => {
     setView(state.view);
   } catch (error) {
     if (['dashboard_token_required', 'authentication_required', 'invalid_or_expired_token'].includes(error.message)) {
-      $('#tokenPanel').classList.remove('hidden');
       if (state.auth.clerkConfigured) {
+        $('#tokenPanel').classList.add('hidden');
         await renderClerkAuth(state.auth.clerk);
       } else {
+        $('#tokenPanel').classList.remove('hidden');
         showAuthGate('Authentication is required.');
       }
     }
@@ -688,6 +754,7 @@ const submitOrganization = async (event) => {
   payload.keyword_whitelist = splitCsv(payload.keyword_whitelist);
   payload.keyword_blacklist = splitCsv(payload.keyword_blacklist);
   await api('/api/admin/organizations', { method: 'POST', body: JSON.stringify(payload) });
+  tenantCache = null;
   event.currentTarget.reset();
   showToast('Tenant created');
   await refresh();
@@ -829,6 +896,7 @@ const bindEvents = () => {
   $('#tenantSelect').addEventListener('change', async (event) => {
     state.selectedTenantId = event.target.value;
     localStorage.setItem('stayez:selectedTenantId', state.selectedTenantId);
+    tenantCache = null;
     $('#contactOrganizationId').value = state.selectedTenantId;
     state.tenant = await api(`/api/tenants/${state.selectedTenantId}`);
     await loadManagementData();

@@ -105,6 +105,8 @@ const serveStatic = (res, pathname) => {
     '/tenant/leads',
     '/tenant/settings',
     '/dashboard',
+    '/sign-in',
+    '/sign-up',
     '/plans',
     '/usage',
     '/organization',
@@ -144,7 +146,7 @@ const handleApi = async (req, res, url) => {
 
   if (req.method === 'GET' && pathname === '/api/auth/config') {
     sendJson(res, 200, {
-      clerk_publishable_key: process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || null,
+      clerk_publishable_key: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || null,
       clerk_enabled: Boolean(process.env.CLERK_JWKS_URL)
     });
     return true;
@@ -340,6 +342,8 @@ export const handleDashboardRoute = async (req, res, url) => {
     url.pathname === '/tenant' ||
     url.pathname === '/tenant/leads' ||
     url.pathname === '/tenant/settings' ||
+    url.pathname === '/sign-in' ||
+    url.pathname === '/sign-up' ||
     url.pathname === '/plans' ||
     url.pathname === '/usage' ||
     url.pathname === '/organization' ||

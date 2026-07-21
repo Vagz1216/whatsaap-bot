@@ -27,7 +27,7 @@ Set these as Azure secrets or app environment variables:
 - `CLERK_JWKS_URL` from the Clerk instance that issues dashboard session tokens.
 - `CLERK_JWT_ISSUER` from the same Clerk instance.
 - `CLERK_SECRET_KEY` for user enrichment when JWT claims do not include email.
-- `CLERK_PUBLISHABLE_KEY` so the static dashboard can render Clerk sign-in.
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` so the static dashboard can render Clerk sign-in.
 - `PLATFORM_OWNER_EMAILS` as a comma-separated list of platform admin emails.
 - `SECRET_ENCRYPTION_KEY` as a stable long random value. Do not rotate it casually; encrypted BYOK keys depend on it.
 - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, and an Azure deployment name using either `AZURE_OPENAI_DEPLOYMENT` or `AZURE_OPENAI_DEPLOYMENT_NAME`
@@ -44,7 +44,7 @@ Do not set global `WC_BASE_URL`, `WC_CONSUMER_KEY`, `WC_CONSUMER_SECRET`, `TELEG
 
 `AZURE_OPENAI_DEPLOYMENT=gpt-5.5` is valid if that is what your current Azure env already uses. `AZURE_OPENAI_DEPLOYMENT_NAME` is only a clearer optional alias accepted by the app.
 
-`DASHBOARD_TOKEN` is not required when Clerk is configured. It is only for local/internal fallback deployments where `CLERK_JWKS_URL` is empty. The static dashboard uses `CLERK_PUBLISHABLE_KEY` to render Clerk sign-in and send a Clerk session JWT to the API as `Authorization: Bearer <token>`.
+`DASHBOARD_TOKEN` is not required when Clerk is configured. It is only for local/internal fallback deployments where `CLERK_JWKS_URL` is empty. The static dashboard uses `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to render Clerk sign-in and send a Clerk session JWT to the API as `Authorization: Bearer <token>`.
 
 ## Production Upgrade Path
 

@@ -131,11 +131,11 @@ DASHBOARD_REQUIRE_AUTH=true
 CLERK_JWKS_URL=https://<your-clerk-domain>/.well-known/jwks.json
 CLERK_JWT_ISSUER=https://<your-clerk-domain>
 CLERK_SECRET_KEY=<from Clerk dashboard>
-CLERK_PUBLISHABLE_KEY=<pk_live_or_pk_test_from Clerk dashboard>
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<pk_live_or_pk_test_from Clerk dashboard>
 PLATFORM_OWNER_EMAILS=admin@example.com
 ```
 
-The backend validates Clerk tokens and the static dashboard uses `CLERK_PUBLISHABLE_KEY` to render Clerk sign-in and send `Authorization: Bearer <Clerk session token>` on API requests. If `CLERK_JWKS_URL` is not set, the API falls back to `DASHBOARD_TOKEN`; use that only for local/internal testing.
+The backend validates Clerk tokens and the static dashboard uses `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` to render Clerk sign-in and send `Authorization: Bearer <Clerk session token>` on API requests. If `CLERK_JWKS_URL` is not set, the API falls back to `DASHBOARD_TOKEN`; use that only for local/internal testing.
 
 Tenant users must have an active `organization_users` row. System owners can use `/admin`; tenant users are blocked from `/api/admin/*` and can only access their assigned `organization_id`.
 
