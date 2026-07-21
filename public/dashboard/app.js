@@ -178,20 +178,33 @@ const hideAuthGate = () => {
   $('.app-shell')?.classList.remove('hidden');
 };
 
-const loadClerkScript = (publishableKey) => new Promise((resolve, reject) => {
-  if (window.Clerk) {
-    resolve(window.Clerk);
-    return;
+const loadClerkClient = async (publishableKey) => {
+  if (state.auth.clerk) return state.auth.clerk;
+
+  const moduleUrls = [
+    'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/+esm',
+    'https://esm.sh/@clerk/clerk-js@latest'
+  ];
+  let lastError = null;
+
+  for (const moduleUrl of moduleUrls) {
+    try {
+      const clerkModule = await import(moduleUrl);
+      const ClerkConstructor = clerkModule.Clerk || clerkModule.default;
+      if (!ClerkConstructor) throw new Error('Clerk constructor was not found.');
+      const clerk = new ClerkConstructor(publishableKey);
+      await clerk.load({
+        afterSignOutUrl: `${window.location.origin}/sign-in`
+      });
+      window.Clerk = clerk;
+      return clerk;
+    } catch (error) {
+      lastError = error;
+    }
   }
-  const script = document.createElement('script');
-  script.async = true;
-  script.crossOrigin = 'anonymous';
-  script.setAttribute('data-clerk-publishable-key', publishableKey);
-  script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
-  script.addEventListener('load', () => resolve(window.Clerk));
-  script.addEventListener('error', () => reject(new Error('Could not load Clerk sign-in.')));
-  document.head.appendChild(script);
-});
+
+  throw new Error(lastError?.message || 'Could not load Clerk sign-in.');
+};
 
 const renderClerkAuth = async (clerk) => {
   const signInNode = $('#clerkSignIn');
@@ -201,11 +214,15 @@ const renderClerkAuth = async (clerk) => {
     $('#tokenPanel')?.classList.add('hidden');
     showAuthGate('Sign in with Clerk to continue.');
     if (signInNode) {
-      signInNode.innerHTML = '';
-      clerk.mountSignIn(signInNode, {
-        routing: 'hash',
-        afterSignInUrl: window.location.href,
-        afterSignUpUrl: window.location.href
+      signInNode.innerHTML = `
+        <button class="primary-button auth-sign-in-button" id="clerkSignInButton" type="button">Sign In</button>
+      `;
+      $('#clerkSignInButton')?.addEventListener('click', () => {
+        clerk.openSignIn({
+          routing: 'hash',
+          afterSignInUrl: window.location.href,
+          afterSignUpUrl: window.location.href
+        });
       });
     }
     if (userButtonNode) userButtonNode.innerHTML = '';
@@ -221,7 +238,11 @@ const renderClerkAuth = async (clerk) => {
     }
   }
   if (userButtonNode && !userButtonNode.hasChildNodes()) {
-    clerk.mountUserButton(userButtonNode);
+    try {
+      clerk.mountUserButton(userButtonNode);
+    } catch {
+      userButtonNode.innerHTML = '';
+    }
   }
 };
 
@@ -245,8 +266,7 @@ const initAuth = async () => {
   }
 
   showAuthGate('Loading Clerk sign-in...');
-  const clerk = await loadClerkScript(config.clerk_publishable_key);
-  await clerk.load();
+  const clerk = await loadClerkClient(config.clerk_publishable_key);
   state.auth.clerk = clerk;
   state.auth.clerkLoaded = true;
 

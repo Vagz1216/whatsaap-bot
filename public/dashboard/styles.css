@@ -152,15 +152,13 @@ button {
 }
 
 .auth-shell {
-  width: min(1040px, 100%);
+  width: min(640px, 100%);
+  min-height: 420px;
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
-  gap: 22px;
-  align-items: stretch;
+  place-items: center;
 }
 
-.auth-copy,
-.auth-card {
+.auth-copy {
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -168,15 +166,20 @@ button {
 }
 
 .auth-copy {
-  padding: 28px;
+  width: 100%;
+  min-height: 340px;
+  padding: 44px;
   display: grid;
   align-content: center;
-  justify-items: start;
-  gap: 14px;
+  justify-items: center;
+  gap: 16px;
+  text-align: center;
 }
 
 .auth-copy h1 {
+  margin: 0;
   font-size: 34px;
+  line-height: 1.1;
 }
 
 .auth-copy p:not(.eyebrow),
@@ -185,17 +188,14 @@ button {
   line-height: 1.5;
 }
 
-.auth-card {
-  min-height: 500px;
-  padding: 18px;
-  display: grid;
-  place-items: center;
-}
-
 .auth-message {
-  margin: 12px 0 0;
+  margin: 0;
   text-align: center;
   font-size: 14px;
+}
+
+.auth-sign-in-button {
+  min-width: 112px;
 }
 
 .clerk-user-button {

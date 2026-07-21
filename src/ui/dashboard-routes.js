@@ -99,6 +99,14 @@ const checkRateLimit = (req) => {
 };
 
 const serveStatic = (res, pathname) => {
+  if (pathname === '/favicon.ico') {
+    res.writeHead(204, {
+      'Cache-Control': 'public, max-age=86400'
+    });
+    res.end();
+    return true;
+  }
+
   const shellRoutes = new Set([
     '/admin',
     '/tenant',
