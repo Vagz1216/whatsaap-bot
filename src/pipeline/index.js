@@ -126,7 +126,7 @@ const insertLocalLead = (safeMsgData, classification) => {
 const isLikelyLeadRequest = (text) => {
   const lower = text.toLowerCase();
   
-  // 1. Hard limits (too short or too long are unlikely to be genuine stay requests)
+  // 1. Hard limits (too short or too long are unlikely to be genuine lead requests)
   // Short messages are already filtered in monitor.js (< 15 chars)
   if (lower.length > 600) return false; // Long forwards, news, or spam
 
@@ -135,23 +135,17 @@ const isLikelyLeadRequest = (text) => {
     'http', 'www', '.com', '.co.ke', // Links are usually spam or promotions
     'job', 'vacancy', 'hiring', 'cv', 'interview', // Job postings
     'news', 'breaking', 'politics', 'update', // News forwards
-    'subscribe', 'youtube', 'tiktok', 'instagram', 'follow', // Social media spam
-    'fully furnished', 'kes/night', 'kes / night', 'kes per night', 'ksh/night', 'kshs/night', // Listing indicators
-    'for sale', 'acre', 'plot', 'title deed', 'buy', 'buying', // Real estate sales
-    'data bundles', 'sofa', 'curtains', 'shoes', 'clothes', 'delivery', 'wholesale' // Selling other items
+    'subscribe', 'youtube', 'tiktok', 'instagram', 'follow' // Social media spam
   ];
   if (blacklist.some(k => lower.includes(k))) return false;
 
   // 3. Positive Keywords (Whitelist) - require at least one strong intent indicator
   const keywords = [
-    'book', 'stay', 'room', 'bedroom', 'guest', 'night', 
-    'budget', 'kes', 'ksh', 'shilling', 'apartment', 'place', 
-    'house', 'rent', 'looking for', 'airbnb', 'bnb', 
-    'natafuta', 'need a', 'needs a', 'client needs', 'any', 'vacant',
-    'chumba', 'nyumba', 'keja', 'hostel', 'studio', // Swahili/Sheng and property types
-    'check in', 'check out', 'check-in', 'check-out', // Dates
-    'available', 'availability', 'reservation', 'reserve', // Status
-    '1b', '2b', '3b', '1br', '2br', '3br', '1 bed', '2 bed', '3 bed' // Abbreviations
+    'quote', 'price', 'pricing', 'cost', 'budget', 'kes', 'ksh', 'shilling',
+    'book', 'booking', 'reserve', 'reservation', 'available', 'availability',
+    'looking for', 'need', 'need a', 'needs a', 'client needs', 'interested',
+    'demo', 'trial', 'consultation', 'order', 'buy', 'rent', 'hire',
+    'natafuta', 'nahitaji', 'bei', 'ngapi', 'available?'
   ];
   
   // Return true if at least one positive keyword is found

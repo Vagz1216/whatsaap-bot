@@ -25,7 +25,7 @@ const findNearbyContacts = async (extractedData, tenantConfig) => {
 
 /**
  * Match extracted lead data against WooCommerce inventory and local/tenant contacts.
- * Returns a match result describing what was found (direct match, nearby hosts, or nothing).
+ * Returns a match result describing what was found (direct match, fallback contacts, or nothing).
  *
  * @param {object} extractedData - Parsed data from classifier (location, check_in, guests, etc.)
  * @param {object|string[]} tenantConfigOrMissing - Tenant config object (SaaS) or legacy missing details array
@@ -52,7 +52,7 @@ export const runMatcher = async (extractedData, tenantConfigOrMissing = {}) => {
 
     logger.info({ kind: 'matcher_search', criteria }, 'Searching WooCommerce inventory');
 
-    // Soft-filter properties based on API
+    // Soft-filter catalog items based on API
     let matchedProperties = [];
     let wooCommerceError = false;
     const isSaaS = !Array.isArray(tenantConfigOrMissing);
@@ -69,11 +69,11 @@ export const runMatcher = async (extractedData, tenantConfigOrMissing = {}) => {
         matchedProperties = properties.slice(0, 3); // top 3 matches
         logger.info({ kind: 'matcher_direct_match', count: matchedProperties.length }, 'Found direct WooCommerce matches');
       } else {
-        logger.info({ kind: 'matcher_no_wc_match' }, 'WooCommerce returned 0 matching properties');
+        logger.info({ kind: 'matcher_no_wc_match' }, 'WooCommerce returned 0 matching items');
       }
     } catch (e) {
       logger.warn({ kind: 'matcher_wc_error', error: e.message }, 'Failed to search WooCommerce');
-      wooCommerceError = true; // Flag so drafter doesn't falsely say "no properties"
+      wooCommerceError = true; // Flag so drafter doesn't falsely say there are no matches
     }
 
     if (matchedProperties.length > 0) {
@@ -84,7 +84,7 @@ export const runMatcher = async (extractedData, tenantConfigOrMissing = {}) => {
     }
 
     // 2. If no match (or WooCommerce unreachable), search tenant contacts in SaaS,
-    // otherwise use the local SQLite host list.
+    // otherwise use the legacy local SQLite contact list.
     let nearbyHosts = [];
     if (isSaaS && tenantConfigOrMissing.organization_id) {
       try {

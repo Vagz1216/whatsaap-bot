@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>StayEZ Operations</title>
+    <title>Scout Operations</title>
     <link rel="stylesheet" href="/dashboard/styles.css">
   </head>
   <body>
@@ -11,7 +11,7 @@
       <div class="auth-shell">
         <div class="auth-copy">
           <span class="brand-mark">S</span>
-          <p class="eyebrow">StayEZ Ops</p>
+          <p class="eyebrow">Scout Ops</p>
           <h1>Sign in to continue</h1>
           <p>Use your authorized account to access tenant operations, plans, usage, and compliance controls.</p>
           <button class="ghost-button" id="legacyAuthButton" type="button">Use dashboard token</button>
@@ -28,8 +28,8 @@
         <div class="brand">
           <span class="brand-mark">S</span>
           <div>
-            <strong>StayEZ Ops</strong>
-            <small>Lead intelligence</small>
+            <strong>Scout Ops</strong>
+            <small>Inbound intelligence</small>
           </div>
         </div>
         <nav class="nav">
@@ -133,8 +133,8 @@
                 </div>
               </div>
               <form class="form-grid" id="organizationForm">
-                <label>Organization name<input name="name" required placeholder="Kilimani Stays"></label>
-                <label>Slug<input name="slug" required placeholder="kilimani-stays"></label>
+                <label>Organization name<input name="name" required placeholder="Acme Services"></label>
+                <label>Slug<input name="slug" required placeholder="acme-services"></label>
                 <label class="wide">Owner email<input name="owner_email" required type="email" placeholder="owner@example.com"></label>
                 <label>WhatsApp session<input name="wa_session_id" required placeholder="kilimani_main"></label>
                 <label>Timezone<input name="timezone" value="Africa/Nairobi"></label>
@@ -151,6 +151,9 @@
                 <label class="wide">WooCommerce URL<input name="wc_base_url" placeholder="https://example.com"></label>
                 <label>WooCommerce key<input name="wc_consumer_key_secret" type="password"></label>
                 <label>WooCommerce secret<input name="wc_consumer_secret_secret" type="password"></label>
+                <label class="wide">Lead classification prompt<textarea name="classifier_system_prompt" rows="5">Classify inbound messages for this tenant. Treat a message as a lead only when it shows real buying, booking, inquiry, support, or service intent for this tenant's business. Return valid JSON using the required schema.</textarea></label>
+                <label class="wide">Keyword whitelist<input name="keyword_whitelist" placeholder="quote, demo, booking, looking for, need"></label>
+                <label class="wide">Keyword blacklist<input name="keyword_blacklist" placeholder="job, vacancy, spam, unrelated"></label>
                 <label class="wide">Drafter persona<textarea name="drafter_persona" rows="3">You are a concise, helpful sales assistant.</textarea></label>
                 <button class="primary-button wide" type="submit">Create tenant</button>
               </form>
@@ -175,17 +178,17 @@
               <div class="panel-heading">
                 <div>
                   <h2>Add contact</h2>
-                  <p>Manual contacts used for matching and host outreach.</p>
+                  <p>Manual contacts used for fallback checks and follow-up.</p>
                 </div>
               </div>
               <form class="form-grid" id="contactForm">
                 <input type="hidden" name="organization_id" id="contactOrganizationId">
-                <label>Name<input name="name" required placeholder="Mary Host"></label>
+                <label>Name<input name="name" required placeholder="Mary Contact"></label>
                 <label>WhatsApp number<input name="whatsapp_number" required placeholder="2547..."></label>
                 <label>Region<input name="region" placeholder="Nairobi"></label>
-                <label>Sub area<input name="sub_area" placeholder="Kilimani"></label>
-                <label class="wide">Tags<input name="tags" placeholder="studio, 1BR, furnished"></label>
-                <label class="wide">Notes<textarea name="notes" rows="3" placeholder="Availability, pricing, or owner preferences"></textarea></label>
+                <label>Sub area<input name="sub_area" placeholder="Westlands"></label>
+                <label class="wide">Tags<input name="tags" placeholder="product line, region, specialty"></label>
+                <label class="wide">Notes<textarea name="notes" rows="3" placeholder="Coverage, availability, pricing rules, or handling notes"></textarea></label>
                 <button class="primary-button wide" type="submit">Save contact</button>
               </form>
               <div class="compact-list" id="contactsList"></div>
@@ -198,7 +201,7 @@
             <div class="panel-heading">
               <div>
                 <h2>Lead review queue</h2>
-                <p>Inspect extracted details, matched inventory, and generated drafts before follow-up.</p>
+                <p>Inspect extracted details, matched items or contacts, and generated drafts before follow-up.</p>
               </div>
               <div class="segmented" id="statusFilter">
                 <button class="active" data-status="all" type="button">All</button>
@@ -217,7 +220,7 @@
               <div class="panel-heading">
                 <div>
                   <h2>Tenant routing</h2>
-                  <p>Control model routing, language, inventory, and lead filters.</p>
+                  <p>Control model routing, language, integrations, and lead filters.</p>
                 </div>
               </div>
               <form class="form-grid" id="configForm">
@@ -233,8 +236,9 @@
                 <label>WooCommerce key<input name="wc_consumer_key_secret" type="password" placeholder="Leave blank to keep current key"></label>
                 <label>WooCommerce secret<input name="wc_consumer_secret_secret" type="password" placeholder="Leave blank to keep current secret"></label>
                 <label class="wide">Meta access token<input name="meta_access_token_secret" type="password" placeholder="Leave blank to keep current token"></label>
-                <label class="wide">Keyword whitelist<input name="keyword_whitelist" placeholder="stay, room, airbnb"></label>
-                <label class="wide">Keyword blacklist<input name="keyword_blacklist" placeholder="job, vacancy, sale"></label>
+                <label class="wide">Lead classification prompt<textarea name="classifier_system_prompt" rows="6"></textarea></label>
+                <label class="wide">Keyword whitelist<input name="keyword_whitelist" placeholder="quote, demo, booking, looking for, need"></label>
+                <label class="wide">Keyword blacklist<input name="keyword_blacklist" placeholder="job, vacancy, spam, unrelated"></label>
                 <label class="wide">Drafter persona<textarea name="drafter_persona" rows="5"></textarea></label>
                 <button class="primary-button wide" type="submit">Update configuration</button>
               </form>

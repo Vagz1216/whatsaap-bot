@@ -15,6 +15,9 @@ import { callOpenRouter } from '../llm/providers/openrouter.js';
 import { decryptSecret, encryptSecret } from '../utils/secrets.js';
 
 const isSaaSMode = () => !!process.env.DATABASE_URL;
+const DEFAULT_CLASSIFIER_SYSTEM_PROMPT = 'Classify inbound messages for this tenant. Treat a message as a lead only when it shows real buying, booking, inquiry, support, or service intent for this tenant business. Return valid JSON using the required schema.';
+const DEFAULT_KEYWORD_WHITELIST = ['quote', 'demo', 'booking', 'looking for', 'need', 'interested', 'price'];
+const DEFAULT_KEYWORD_BLACKLIST = ['job', 'vacancy', 'spam', 'unrelated', 'http'];
 
 const parseJson = (value, fallback = null) => {
   if (value == null || value === '') return fallback;
@@ -535,9 +538,9 @@ export async function createOrganization(input, actor = null) {
       input.wc_base_url || null,
       input.wc_consumer_key_secret || null,
       input.wc_consumer_secret_secret || null,
-      input.classifier_system_prompt || 'Classify inbound messages and extract actionable lead details.',
-      JSON.stringify(input.keyword_whitelist || ['stay', 'room', 'apartment', 'airbnb', 'bnb', 'booking']),
-      JSON.stringify(input.keyword_blacklist || ['job', 'vacancy', 'for sale', 'http']),
+      input.classifier_system_prompt || DEFAULT_CLASSIFIER_SYSTEM_PROMPT,
+      JSON.stringify(input.keyword_whitelist?.length ? input.keyword_whitelist : DEFAULT_KEYWORD_WHITELIST),
+      JSON.stringify(input.keyword_blacklist?.length ? input.keyword_blacklist : DEFAULT_KEYWORD_BLACKLIST),
       input.drafter_persona || 'You are a concise, helpful sales assistant.',
       input.default_language || 'en',
       input.llm_routing_mode || 'balanced'
@@ -920,7 +923,7 @@ export async function getTenantDashboard(organizationId) {
                   CASE WHEN wc_consumer_secret_secret IS NULL OR wc_consumer_secret_secret = '' THEN false ELSE true END AS wc_consumer_secret_configured,
                   CASE WHEN meta_access_token_secret IS NULL OR meta_access_token_secret = '' THEN false ELSE true END AS meta_access_token_configured,
                   default_language, llm_routing_mode,
-                  keyword_whitelist, keyword_blacklist, drafter_persona, updated_at
+                  classifier_system_prompt, keyword_whitelist, keyword_blacklist, drafter_persona, updated_at
            FROM tenant_configs WHERE organization_id = $1`, [orgId]),
     query(`SELECT COUNT(*)::int AS total_leads,
                   COUNT(*) FILTER (WHERE status IN ('ready','delivered'))::int AS ready_leads,
@@ -1008,10 +1011,11 @@ export async function updateTenantConfig(organizationId, input) {
             llm_routing_mode = $4,
             keyword_whitelist = $5,
             keyword_blacklist = $6,
-            drafter_persona = $7,
-            wc_consumer_key_secret = COALESCE($8, wc_consumer_key_secret),
-            wc_consumer_secret_secret = COALESCE($9, wc_consumer_secret_secret),
-            meta_access_token_secret = COALESCE($10, meta_access_token_secret),
+            classifier_system_prompt = $7,
+            drafter_persona = $8,
+            wc_consumer_key_secret = COALESCE($9, wc_consumer_key_secret),
+            wc_consumer_secret_secret = COALESCE($10, wc_consumer_secret_secret),
+            meta_access_token_secret = COALESCE($11, meta_access_token_secret),
             updated_at = CURRENT_TIMESTAMP
       WHERE organization_id = $1
       RETURNING wa_session_id, wc_base_url,
@@ -1019,7 +1023,7 @@ export async function updateTenantConfig(organizationId, input) {
                 CASE WHEN wc_consumer_secret_secret IS NULL OR wc_consumer_secret_secret = '' THEN false ELSE true END AS wc_consumer_secret_configured,
                 CASE WHEN meta_access_token_secret IS NULL OR meta_access_token_secret = '' THEN false ELSE true END AS meta_access_token_configured,
                 default_language, llm_routing_mode,
-                keyword_whitelist, keyword_blacklist, drafter_persona, updated_at`,
+                classifier_system_prompt, keyword_whitelist, keyword_blacklist, drafter_persona, updated_at`,
     [
       Number(organizationId),
       input.wc_base_url || null,
@@ -1027,6 +1031,7 @@ export async function updateTenantConfig(organizationId, input) {
       input.llm_routing_mode || 'balanced',
       JSON.stringify(input.keyword_whitelist || []),
       JSON.stringify(input.keyword_blacklist || []),
+      input.classifier_system_prompt || DEFAULT_CLASSIFIER_SYSTEM_PROMPT,
       input.drafter_persona || 'You are a concise, helpful sales assistant.',
       input.wc_consumer_key_secret ? String(input.wc_consumer_key_secret).trim() : null,
       input.wc_consumer_secret_secret ? String(input.wc_consumer_secret_secret).trim() : null,

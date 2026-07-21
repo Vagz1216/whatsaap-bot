@@ -331,7 +331,7 @@ const renderAdmin = () => {
   $('#adminMetrics').innerHTML = [
     metricCard('Organizations', fmt.format(data.organizations.total || 0), `${fmt.format(data.organizations.active || 0)} active tenants`),
     metricCard('Lead volume', fmt.format(data.leads.total_leads || 0), `${fmt.format(data.leads.ready_leads || 0)} ready or delivered`),
-    metricCard('Contacts', fmt.format(data.contacts.total_contacts || 0), 'Manual matching inventory'),
+    metricCard('Contacts', fmt.format(data.contacts.total_contacts || 0), 'Manual follow-up directory'),
     metricCard('30 day LLM cost', money.format(Number(data.usage.llm_cost_usd || 0)), `${fmt.format(data.usage.llm_tokens || 0)} tokens`)
   ].join('');
 
@@ -378,7 +378,7 @@ const renderTenant = () => {
     metricCard('Tenant', data.organization.name, status(data.organization.status)),
     metricCard('Leads', fmt.format(data.stats.total_leads || 0), `${fmt.format(data.stats.ready_leads || 0)} ready or delivered`),
     metricCard('Manual replies', fmt.format(data.stats.manual_required || 0), 'Platform or group handoff'),
-    metricCard('Contacts', fmt.format(data.stats.contacts || 0), 'Available for matching')
+    metricCard('Contacts', fmt.format(data.stats.contacts || 0), 'Available for follow-up')
   ].join('');
 
   $('#tenantLeadList').innerHTML = data.leads.slice(0, 12).map((lead) => leadCard(lead, true)).join('') || '<p>No leads captured yet.</p>';
@@ -401,6 +401,7 @@ const renderTenant = () => {
     configForm.wc_consumer_key_secret.placeholder = config.wc_consumer_key_configured ? 'Configured - leave blank to keep current key' : 'Not configured';
     configForm.wc_consumer_secret_secret.placeholder = config.wc_consumer_secret_configured ? 'Configured - leave blank to keep current secret' : 'Not configured';
     configForm.meta_access_token_secret.placeholder = config.meta_access_token_configured ? 'Configured - leave blank to keep current token' : 'Not configured';
+    configForm.classifier_system_prompt.value = config.classifier_system_prompt || '';
     configForm.keyword_whitelist.value = (config.keyword_whitelist || []).join(', ');
     configForm.keyword_blacklist.value = (config.keyword_blacklist || []).join(', ');
     configForm.drafter_persona.value = config.drafter_persona || '';
@@ -684,6 +685,8 @@ const submitOrganization = async (event) => {
   if (!state.actor?.system_owner) return;
   const payload = formData(event.currentTarget);
   payload.plan_id = Number(payload.plan_id);
+  payload.keyword_whitelist = splitCsv(payload.keyword_whitelist);
+  payload.keyword_blacklist = splitCsv(payload.keyword_blacklist);
   await api('/api/admin/organizations', { method: 'POST', body: JSON.stringify(payload) });
   event.currentTarget.reset();
   showToast('Tenant created');
