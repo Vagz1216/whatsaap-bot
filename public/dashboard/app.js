@@ -33,6 +33,18 @@ const routeByView = {
   compliance: '/compliance'
 };
 
+const viewIdByView = {
+  admin: 'adminView',
+  tenant: 'tenantView',
+  leads: 'leadsView',
+  settings: 'settingsView',
+  plans: 'plansView',
+  usage: 'usageView',
+  organization: 'organizationView',
+  llm: 'llmView',
+  compliance: 'complianceView'
+};
+
 const viewByPath = {
   '/admin': 'admin',
   '/tenant': 'tenant',
@@ -433,8 +445,13 @@ const renderShellAccess = () => {
     button.classList.toggle('hidden', !allowed);
   });
   $('#tenantSelect').classList.toggle('hidden', state.organizations.length === 0);
-  $('#adminView').classList.toggle('hidden', !canAccessView('admin'));
-  $('#settingsView').classList.toggle('hidden', !canAccessView('settings'));
+  Object.entries(viewIdByView).forEach(([view, id]) => {
+    const section = $(`#${id}`);
+    if (!section) return;
+    const allowed = canAccessView(view);
+    section.classList.toggle('hidden', !allowed);
+    if (!allowed) section.classList.remove('active');
+  });
 };
 
 const setView = (view) => {
