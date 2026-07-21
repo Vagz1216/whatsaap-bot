@@ -142,6 +142,14 @@ const handleApi = async (req, res, url) => {
 
   const pathname = url.pathname;
 
+  if (req.method === 'GET' && pathname === '/api/auth/config') {
+    sendJson(res, 200, {
+      clerk_publishable_key: process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || null,
+      clerk_enabled: Boolean(process.env.CLERK_JWKS_URL)
+    });
+    return true;
+  }
+
   try {
     const actor = await getDashboardActor(req);
 

@@ -16,9 +16,10 @@ Use Clerk for production dashboard access:
 *   `CLERK_JWKS_URL`: Clerk JWKS URL for the same Clerk instance used by the dashboard client.
 *   `CLERK_JWT_ISSUER`: Clerk issuer URL. This should match the `iss` claim in Clerk session tokens.
 *   `CLERK_SECRET_KEY`: Clerk backend secret key, used only to enrich user metadata when JWT claims are incomplete.
+*   `CLERK_PUBLISHABLE_KEY`: Clerk browser key used by the static dashboard to render sign-in.
 *   `PLATFORM_OWNER_EMAILS`: Comma-separated emails that should receive platform owner access.
 
-The backend validates Clerk JWTs; it does not create Clerk browser sessions. The deployed dashboard/client must send `Authorization: Bearer <Clerk session token>` to API requests. `DASHBOARD_TOKEN` is only a local/internal fallback when `CLERK_JWKS_URL` is empty. Do not use it as the main production auth mechanism.
+The backend validates Clerk JWTs and the static dashboard uses `CLERK_PUBLISHABLE_KEY` to create Clerk browser sessions. `DASHBOARD_TOKEN` is only a local/internal fallback when `CLERK_JWKS_URL` is empty. Do not use it as the main production auth mechanism.
 
 ### LLM API Keys (Global Aggregators)
 *These keys are used by the fallback router to process AI requests for all tenants.*

@@ -7,7 +7,23 @@
     <link rel="stylesheet" href="/dashboard/styles.css">
   </head>
   <body>
-    <div class="app-shell">
+    <section class="auth-gate hidden" id="authGate" aria-live="polite">
+      <div class="auth-shell">
+        <div class="auth-copy">
+          <span class="brand-mark">S</span>
+          <p class="eyebrow">StayEZ Ops</p>
+          <h1>Sign in to continue</h1>
+          <p>Use your authorized account to access tenant operations, plans, usage, and compliance controls.</p>
+          <button class="ghost-button" id="legacyAuthButton" type="button">Use dashboard token</button>
+        </div>
+        <div class="auth-card">
+          <div id="clerkSignIn"></div>
+          <p class="auth-message" id="authMessage">Loading authentication...</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="app-shell hidden">
       <aside class="sidebar">
         <div class="brand">
           <span class="brand-mark">S</span>
@@ -69,6 +85,7 @@
           </div>
           <div class="topbar-actions">
             <select id="tenantSelect" aria-label="Select tenant"></select>
+            <div class="clerk-user-button" id="clerkUserButton"></div>
             <button class="ghost-button" id="tokenButton" type="button">Auth token</button>
             <button class="primary-button" id="refreshButton" type="button">Refresh</button>
           </div>

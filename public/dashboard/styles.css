@@ -144,6 +144,67 @@ button {
   padding: 26px;
 }
 
+.auth-gate {
+  min-height: 100vh;
+  padding: 28px;
+  display: grid;
+  place-items: center;
+}
+
+.auth-shell {
+  width: min(1040px, 100%);
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 22px;
+  align-items: stretch;
+}
+
+.auth-copy,
+.auth-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.auth-copy {
+  padding: 28px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 14px;
+}
+
+.auth-copy h1 {
+  font-size: 34px;
+}
+
+.auth-copy p:not(.eyebrow),
+.auth-message {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.auth-card {
+  min-height: 500px;
+  padding: 18px;
+  display: grid;
+  place-items: center;
+}
+
+.auth-message {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 14px;
+}
+
+.clerk-user-button {
+  min-width: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+}
+
 .topbar {
   min-height: 78px;
   display: flex;
@@ -586,7 +647,8 @@ dialog::backdrop {
 
   .metric-grid,
   .two-column,
-  .lead-board {
+  .lead-board,
+  .auth-shell {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -616,6 +678,19 @@ dialog::backdrop {
 
   .topbar select {
     min-width: 0;
+  }
+
+  .auth-gate {
+    padding: 16px;
+  }
+
+  .auth-shell,
+  .metric-grid,
+  .two-column,
+  .lead-board,
+  .dialog-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 
   .metric-grid,

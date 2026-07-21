@@ -9,6 +9,13 @@ const state = {
   events: [],
   organizations: [],
   actor: null,
+  auth: {
+    clerk: null,
+    clerkConfigured: false,
+    clerkLoaded: false,
+    refreshingFromClerk: false,
+    blocked: false
+  },
   selectedTenantId: localStorage.getItem('stayez:selectedTenantId') || '0',
   token: localStorage.getItem('stayez:dashboardToken') || '',
   statusFilter: 'all'
@@ -85,10 +92,21 @@ const providerUi = {
   }
 };
 
-const headers = () => ({
-  'Content-Type': 'application/json',
-  ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
-});
+const getAuthToken = async () => {
+  if (state.auth.clerk?.session) {
+    const token = await state.auth.clerk.session.getToken();
+    if (token) return token;
+  }
+  return state.token;
+};
+
+const authHeaders = async () => {
+  const token = await getAuthToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
+};
 
 const showToast = (message) => {
   const toast = $('#toast');
@@ -100,13 +118,117 @@ const showToast = (message) => {
 const api = async (path, options = {}) => {
   const response = await fetch(path, {
     ...options,
-    headers: { ...headers(), ...(options.headers || {}) }
+    headers: { ...(await authHeaders()), ...(options.headers || {}) }
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(body.error || `Request failed: ${response.status}`);
   }
   return body;
+};
+
+const showAuthGate = (message = 'Sign in to continue.') => {
+  $('#authGate')?.classList.remove('hidden');
+  $('.app-shell')?.classList.add('hidden');
+  const authMessage = $('#authMessage');
+  if (authMessage) authMessage.textContent = message;
+};
+
+const hideAuthGate = () => {
+  $('#authGate')?.classList.add('hidden');
+  $('.app-shell')?.classList.remove('hidden');
+};
+
+const loadClerkScript = (publishableKey) => new Promise((resolve, reject) => {
+  if (window.Clerk) {
+    resolve(window.Clerk);
+    return;
+  }
+  const script = document.createElement('script');
+  script.async = true;
+  script.crossOrigin = 'anonymous';
+  script.setAttribute('data-clerk-publishable-key', publishableKey);
+  script.src = 'https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js';
+  script.addEventListener('load', () => resolve(window.Clerk));
+  script.addEventListener('error', () => reject(new Error('Could not load Clerk sign-in.')));
+  document.head.appendChild(script);
+});
+
+const renderClerkAuth = async (clerk) => {
+  const signInNode = $('#clerkSignIn');
+  const userButtonNode = $('#clerkUserButton');
+
+  if (!clerk?.user || !clerk?.session) {
+    showAuthGate('Sign in with Clerk to continue.');
+    if (signInNode) {
+      signInNode.innerHTML = '';
+      clerk.mountSignIn(signInNode, {
+        routing: 'hash',
+        afterSignInUrl: window.location.href,
+        afterSignUpUrl: window.location.href
+      });
+    }
+    if (userButtonNode) userButtonNode.innerHTML = '';
+    return;
+  }
+
+  hideAuthGate();
+  if (signInNode) {
+    try {
+      clerk.unmountSignIn(signInNode);
+    } catch {
+      signInNode.innerHTML = '';
+    }
+  }
+  if (userButtonNode && !userButtonNode.hasChildNodes()) {
+    clerk.mountUserButton(userButtonNode);
+  }
+};
+
+const initAuth = async () => {
+  const response = await fetch('/api/auth/config', { headers: { 'Accept': 'application/json' } });
+  const config = response.ok ? await response.json() : {};
+  state.auth.clerkConfigured = Boolean(config.clerk_enabled && config.clerk_publishable_key);
+  state.auth.blocked = false;
+  $('#tokenButton')?.classList.toggle('hidden', Boolean(config.clerk_enabled));
+  $('#legacyAuthButton')?.classList.toggle('hidden', Boolean(config.clerk_enabled));
+
+  if (config.clerk_enabled && !config.clerk_publishable_key) {
+    state.auth.blocked = true;
+    showAuthGate('CLERK_PUBLISHABLE_KEY is missing from the backend environment.');
+    return;
+  }
+
+  if (!config.clerk_enabled) {
+    if (!state.token) showAuthGate('Paste a dashboard token to continue.');
+    return;
+  }
+
+  showAuthGate('Loading Clerk sign-in...');
+  const clerk = await loadClerkScript(config.clerk_publishable_key);
+  await clerk.load();
+  state.auth.clerk = clerk;
+  state.auth.clerkLoaded = true;
+
+  clerk.addListener(async ({ user, session }) => {
+    state.auth.clerk = clerk;
+    if (!user || !session) {
+      state.actor = null;
+      showAuthGate('Sign in with Clerk to continue.');
+      return;
+    }
+    await renderClerkAuth(clerk);
+    if (!state.auth.refreshingFromClerk) {
+      state.auth.refreshingFromClerk = true;
+      try {
+        await refresh();
+      } finally {
+        state.auth.refreshingFromClerk = false;
+      }
+    }
+  });
+
+  await renderClerkAuth(clerk);
 };
 
 const formData = (form) => Object.fromEntries(new FormData(form).entries());
@@ -151,7 +273,10 @@ const canAccessView = (view) => ({
   compliance: can('can_view_compliance')
 }[view] || false);
 
-const firstAllowedView = () => ['tenant', 'leads', 'settings', 'plans', 'usage', 'organization', 'llm', 'compliance', 'admin'].find(canAccessView) || 'tenant';
+const firstAllowedView = () => {
+  if (state.actor?.system_owner && canAccessView('admin')) return 'admin';
+  return ['tenant', 'leads', 'settings', 'plans', 'usage', 'organization', 'llm', 'compliance', 'admin'].find(canAccessView) || 'tenant';
+};
 
 const renderShellAccess = () => {
   $$('.nav-item').forEach((button) => {
@@ -528,6 +653,7 @@ const loadManagementData = async () => {
 const refresh = async () => {
   try {
     await loadOrganizations();
+    hideAuthGate();
     state.admin = state.actor?.system_owner ? await api('/api/admin/overview') : null;
     if (state.selectedTenantId !== '' && canAccessView('tenant')) {
       state.tenant = await api(`/api/tenants/${state.selectedTenantId}`);
@@ -543,6 +669,11 @@ const refresh = async () => {
   } catch (error) {
     if (['dashboard_token_required', 'authentication_required', 'invalid_or_expired_token'].includes(error.message)) {
       $('#tokenPanel').classList.remove('hidden');
+      if (state.auth.clerkConfigured) {
+        await renderClerkAuth(state.auth.clerk);
+      } else {
+        showAuthGate('Authentication is required.');
+      }
     }
     showToast(error.message);
   }
@@ -705,6 +836,10 @@ const bindEvents = () => {
     renderCompliance();
   });
   $('#tokenButton').addEventListener('click', () => $('#tokenPanel').classList.toggle('hidden'));
+  $('#legacyAuthButton')?.addEventListener('click', () => {
+    hideAuthGate();
+    $('#tokenPanel').classList.remove('hidden');
+  });
   $('#saveTokenButton').addEventListener('click', async () => {
     state.token = $('#dashboardToken').value.trim();
     localStorage.setItem('stayez:dashboardToken', state.token);
@@ -760,7 +895,18 @@ const bindEvents = () => {
   });
 };
 
-bindEvents();
-updateLlmCredentialForm();
-setView(state.view);
-refresh();
+const boot = async () => {
+  bindEvents();
+  updateLlmCredentialForm();
+  try {
+    await initAuth();
+    if (state.auth.blocked) return;
+    if (state.auth.clerkConfigured && !state.auth.clerk?.session) return;
+    await refresh();
+  } catch (error) {
+    showAuthGate(error.message || 'Authentication could not be initialized.');
+    showToast(error.message || 'Authentication could not be initialized.');
+  }
+};
+
+boot();
