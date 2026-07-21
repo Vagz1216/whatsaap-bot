@@ -193,9 +193,6 @@ const loadClerkClient = async (publishableKey) => {
       const ClerkConstructor = clerkModule.Clerk || clerkModule.default;
       if (!ClerkConstructor) throw new Error('Clerk constructor was not found.');
       const clerk = new ClerkConstructor(publishableKey);
-      await clerk.load({
-        afterSignOutUrl: `${window.location.origin}/sign-in`
-      });
       window.Clerk = clerk;
       return clerk;
     } catch (error) {
@@ -204,6 +201,59 @@ const loadClerkClient = async (publishableKey) => {
   }
 
   throw new Error(lastError?.message || 'Could not load Clerk sign-in.');
+};
+
+const deriveClerkDomain = (publishableKey) => {
+  const encodedDomain = String(publishableKey || '').split('_')[2];
+  if (!encodedDomain) return null;
+  try {
+    return atob(encodedDomain).replace(/\$$/, '');
+  } catch {
+    return null;
+  }
+};
+
+const loadClerkUiBundle = (publishableKey) => new Promise((resolve, reject) => {
+  if (window.__internal_ClerkUICtor) {
+    resolve(window.__internal_ClerkUICtor);
+    return;
+  }
+
+  const clerkDomain = deriveClerkDomain(publishableKey);
+  if (!clerkDomain) {
+    reject(new Error('Could not derive Clerk frontend domain from publishable key.'));
+    return;
+  }
+
+  const script = document.createElement('script');
+  script.async = true;
+  script.crossOrigin = 'anonymous';
+  script.src = `https://${clerkDomain}/npm/@clerk/ui@1/dist/ui.browser.js`;
+  script.addEventListener('load', () => {
+    if (window.__internal_ClerkUICtor) {
+      resolve(window.__internal_ClerkUICtor);
+      return;
+    }
+    reject(new Error('Clerk UI bundle loaded without a UI constructor.'));
+  }, { once: true });
+  script.addEventListener('error', () => reject(new Error('Could not load Clerk UI bundle.')), { once: true });
+  document.head.appendChild(script);
+});
+
+const loadClerkWithUi = async (publishableKey) => {
+  const [clerk, ClerkUI] = await Promise.all([
+    loadClerkClient(publishableKey),
+    loadClerkUiBundle(publishableKey)
+  ]);
+
+  if (!clerk.loaded) {
+    await clerk.load({
+      afterSignOutUrl: `${window.location.origin}/sign-in`,
+      ui: { ClerkUI }
+    });
+  }
+
+  return clerk;
 };
 
 const startClerkSignIn = async (clerk, signInNode) => {
@@ -305,7 +355,7 @@ const initAuth = async () => {
   }
 
   showAuthGate('Loading Clerk sign-in...');
-  const clerk = await loadClerkClient(config.clerk_publishable_key);
+  const clerk = await loadClerkWithUi(config.clerk_publishable_key);
   state.auth.clerk = clerk;
   state.auth.clerkLoaded = true;
 
