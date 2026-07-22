@@ -918,7 +918,8 @@ export async function getTenantDashboard(organizationId) {
 
   const [org, config, stats, usage, leads, contacts] = await Promise.all([
     query('SELECT id, name, slug, status, timezone, created_at FROM organizations WHERE id = $1', [orgId]),
-    query(`SELECT wa_session_id, wc_base_url,
+    query(`SELECT wa_session_id, telegram_chat_id, wc_base_url,
+                  CASE WHEN telegram_bot_token_secret IS NULL OR telegram_bot_token_secret = '' THEN false ELSE true END AS telegram_bot_token_configured,
                   CASE WHEN wc_consumer_key_secret IS NULL OR wc_consumer_key_secret = '' THEN false ELSE true END AS wc_consumer_key_configured,
                   CASE WHEN wc_consumer_secret_secret IS NULL OR wc_consumer_secret_secret = '' THEN false ELSE true END AS wc_consumer_secret_configured,
                   CASE WHEN meta_access_token_secret IS NULL OR meta_access_token_secret = '' THEN false ELSE true END AS meta_access_token_configured,
@@ -1004,21 +1005,31 @@ export async function updateTenantConfig(organizationId, input) {
     throw Object.assign(new Error('Tenant configuration requires DATABASE_URL SaaS mode.'), { statusCode: 400 });
   }
 
+  const waSessionId = String(input.wa_session_id || '').trim();
+  const telegramChatId = String(input.telegram_chat_id || '').trim();
+  if (!waSessionId || !telegramChatId) {
+    throw Object.assign(new Error('wa_session_id and telegram_chat_id are required.'), { statusCode: 422 });
+  }
+
   const result = await query(
     `UPDATE tenant_configs
-        SET wc_base_url = $2,
-            default_language = $3,
-            llm_routing_mode = $4,
-            keyword_whitelist = $5,
-            keyword_blacklist = $6,
-            classifier_system_prompt = $7,
-            drafter_persona = $8,
-            wc_consumer_key_secret = COALESCE($9, wc_consumer_key_secret),
-            wc_consumer_secret_secret = COALESCE($10, wc_consumer_secret_secret),
-            meta_access_token_secret = COALESCE($11, meta_access_token_secret),
+        SET wa_session_id = $2,
+            telegram_chat_id = $3,
+            wc_base_url = $4,
+            default_language = $5,
+            llm_routing_mode = $6,
+            keyword_whitelist = $7,
+            keyword_blacklist = $8,
+            classifier_system_prompt = $9,
+            drafter_persona = $10,
+            wc_consumer_key_secret = COALESCE($11, wc_consumer_key_secret),
+            wc_consumer_secret_secret = COALESCE($12, wc_consumer_secret_secret),
+            meta_access_token_secret = COALESCE($13, meta_access_token_secret),
+            telegram_bot_token_secret = COALESCE($14, telegram_bot_token_secret),
             updated_at = CURRENT_TIMESTAMP
       WHERE organization_id = $1
-      RETURNING wa_session_id, wc_base_url,
+      RETURNING wa_session_id, telegram_chat_id, wc_base_url,
+                CASE WHEN telegram_bot_token_secret IS NULL OR telegram_bot_token_secret = '' THEN false ELSE true END AS telegram_bot_token_configured,
                 CASE WHEN wc_consumer_key_secret IS NULL OR wc_consumer_key_secret = '' THEN false ELSE true END AS wc_consumer_key_configured,
                 CASE WHEN wc_consumer_secret_secret IS NULL OR wc_consumer_secret_secret = '' THEN false ELSE true END AS wc_consumer_secret_configured,
                 CASE WHEN meta_access_token_secret IS NULL OR meta_access_token_secret = '' THEN false ELSE true END AS meta_access_token_configured,
@@ -1026,6 +1037,8 @@ export async function updateTenantConfig(organizationId, input) {
                 classifier_system_prompt, keyword_whitelist, keyword_blacklist, drafter_persona, updated_at`,
     [
       Number(organizationId),
+      waSessionId,
+      telegramChatId,
       input.wc_base_url || null,
       input.default_language || 'en',
       input.llm_routing_mode || 'balanced',
@@ -1035,7 +1048,8 @@ export async function updateTenantConfig(organizationId, input) {
       input.drafter_persona || 'You are a concise, helpful sales assistant.',
       input.wc_consumer_key_secret ? String(input.wc_consumer_key_secret).trim() : null,
       input.wc_consumer_secret_secret ? String(input.wc_consumer_secret_secret).trim() : null,
-      input.meta_access_token_secret ? String(input.meta_access_token_secret).trim() : null
+      input.meta_access_token_secret ? String(input.meta_access_token_secret).trim() : null,
+      input.telegram_bot_token_secret ? String(input.telegram_bot_token_secret).trim() : null
     ]
   );
 

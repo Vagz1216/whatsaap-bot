@@ -576,6 +576,9 @@ const renderTenant = () => {
   if (configForm && canAccessView('settings') && !state.forms.configDirty) {
     configForm.llm_routing_mode.value = config.llm_routing_mode || 'balanced';
     configForm.default_language.value = config.default_language || 'en';
+    configForm.wa_session_id.value = config.wa_session_id || '';
+    configForm.telegram_chat_id.value = config.telegram_chat_id || '';
+    configForm.telegram_bot_token_secret.placeholder = config.telegram_bot_token_configured ? 'Configured - leave blank to keep current token' : 'Not configured';
     configForm.wc_base_url.value = config.wc_base_url || '';
     configForm.wc_consumer_key_secret.placeholder = config.wc_consumer_key_configured ? 'Configured - leave blank to keep current key' : 'Not configured';
     configForm.wc_consumer_secret_secret.placeholder = config.wc_consumer_secret_configured ? 'Configured - leave blank to keep current secret' : 'Not configured';
@@ -920,6 +923,7 @@ const submitConfig = async (event) => {
   if (!payload.wc_consumer_key_secret) delete payload.wc_consumer_key_secret;
   if (!payload.wc_consumer_secret_secret) delete payload.wc_consumer_secret_secret;
   if (!payload.meta_access_token_secret) delete payload.meta_access_token_secret;
+  if (!payload.telegram_bot_token_secret) delete payload.telegram_bot_token_secret;
   await api(`/api/tenants/${state.selectedTenantId}/config`, { method: 'PATCH', body: JSON.stringify(payload) });
   state.forms.configDirty = false;
   showToast('Configuration updated', 'success');
