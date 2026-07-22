@@ -157,9 +157,11 @@ const authHeaders = async (skipCache = false) => {
   };
 };
 
-const showToast = (message) => {
+const showToast = (message, variant = 'info') => {
   const toast = $('#toast');
   toast.textContent = message;
+  toast.classList.remove('success', 'warning', 'error', 'info');
+  toast.classList.add(variant);
   toast.classList.add('show');
   window.setTimeout(() => toast.classList.remove('show'), 2600);
 };
@@ -413,7 +415,15 @@ const metricCard = (label, value, detail) => `
   </article>
 `;
 
-const status = (value) => `<span class="status ${safeText(value)}">${safeText(value)}</span>`;
+const statusVariant = (value) => {
+  const normalized = String(value || '').toUpperCase().replace(/\s+/g, '_');
+  if (['ACTIVE', 'READY', 'DELIVERED', 'APPROVED', 'TRIALING', 'PLAN_ALLOWS', 'PASSED'].includes(normalized)) return 'success';
+  if (['PROCESSING', 'PENDING', 'INVITED', 'NONE'].includes(normalized)) return 'warning';
+  if (['REJECTED', 'ARCHIVED', 'SUSPENDED', 'DISABLED', 'PLAN_BLOCKS', 'FAILED'].includes(normalized)) return 'error';
+  return 'info';
+};
+
+const status = (value) => `<span class="status ${statusVariant(value)}">${safeText(value)}</span>`;
 
 const selectedOrganization = () => state.organizations.find((org) => String(org.id) === String(state.selectedTenantId)) || state.organizations[0] || null;
 
@@ -871,7 +881,7 @@ const refresh = async () => {
         showAuthGate('Authentication is required.');
       }
     }
-    showToast(error.message);
+    showToast(error.message, 'error');
   }
 };
 
@@ -885,25 +895,25 @@ const submitOrganization = async (event) => {
   await api('/api/admin/organizations', { method: 'POST', body: JSON.stringify(payload) });
   tenantCache = null;
   event.currentTarget.reset();
-  showToast('Tenant created');
+  showToast('Tenant created', 'success');
   await refresh();
 };
 
 const submitContact = async (event) => {
   event.preventDefault();
-  if (!can('can_manage_contacts')) return showToast('Contact management is not allowed for this role');
+  if (!can('can_manage_contacts')) return showToast('Contact management is not allowed for this role', 'warning');
   const payload = formData(event.currentTarget);
   payload.organization_id = Number(state.selectedTenantId);
   await api('/api/contacts', { method: 'POST', body: JSON.stringify(payload) });
   event.currentTarget.reset();
   $('#contactOrganizationId').value = state.selectedTenantId;
-  showToast('Contact saved');
+  showToast('Contact saved', 'success');
   await refresh();
 };
 
 const submitConfig = async (event) => {
   event.preventDefault();
-  if (!can('can_manage_config')) return showToast('Configuration is not allowed for this role');
+  if (!can('can_manage_config')) return showToast('Configuration is not allowed for this role', 'warning');
   const payload = formData(event.currentTarget);
   payload.keyword_whitelist = splitCsv(payload.keyword_whitelist);
   payload.keyword_blacklist = splitCsv(payload.keyword_blacklist);
@@ -912,13 +922,13 @@ const submitConfig = async (event) => {
   if (!payload.meta_access_token_secret) delete payload.meta_access_token_secret;
   await api(`/api/tenants/${state.selectedTenantId}/config`, { method: 'PATCH', body: JSON.stringify(payload) });
   state.forms.configDirty = false;
-  showToast('Configuration updated');
+  showToast('Configuration updated', 'success');
   await refresh();
 };
 
 const submitPlan = async (event) => {
   event.preventDefault();
-  if (!can('can_manage_subscription_plans')) return showToast('Plan management is not allowed for this role');
+  if (!can('can_manage_subscription_plans')) return showToast('Plan management is not allowed for this role', 'warning');
   const payload = formData(event.currentTarget);
   payload.monthly_price_cents = Number(payload.monthly_price_cents || 0);
   payload.trial_days = Number(payload.trial_days || 14);
@@ -927,17 +937,17 @@ const submitPlan = async (event) => {
   payload.allow_byok = payload.allow_byok === 'true';
   await api('/api/plans', { method: 'POST', body: JSON.stringify(payload) });
   event.currentTarget.reset();
-  showToast('Plan created');
+  showToast('Plan created', 'success');
   await refresh();
 };
 
 const assignPlan = async (planId) => {
-  if (!can('can_choose_subscription_plan')) return showToast('Plan assignment is not allowed for this role');
+  if (!can('can_choose_subscription_plan')) return showToast('Plan assignment is not allowed for this role', 'warning');
   await api(`/api/organizations/${state.selectedTenantId}/subscription`, {
     method: 'POST',
     body: JSON.stringify({ plan_id: Number(planId), status: 'ACTIVE' })
   });
-  showToast('Plan assigned');
+  showToast('Plan assigned', 'success');
   await refresh();
 };
 
@@ -957,7 +967,7 @@ const manageOrganizationPlan = async (organizationId) => {
 
 const submitOrganizationEdit = async (event) => {
   event.preventDefault();
-  if (!can('can_manage_organization')) return showToast('Organization management is not allowed for this role');
+  if (!can('can_manage_organization')) return showToast('Organization management is not allowed for this role', 'warning');
   const payload = formData(event.currentTarget);
   const planId = Number(payload.plan_id);
   delete payload.plan_id;
@@ -968,55 +978,55 @@ const submitOrganizationEdit = async (event) => {
       body: JSON.stringify({ plan_id: planId, status: 'ACTIVE' })
     });
   }
-  showToast('Organization updated');
+  showToast('Organization updated', 'success');
   await refresh();
 };
 
 const submitMember = async (event) => {
   event.preventDefault();
-  if (!can('can_manage_users')) return showToast('User management is not allowed for this role');
+  if (!can('can_manage_users')) return showToast('User management is not allowed for this role', 'warning');
   const payload = formData(event.currentTarget);
   await api(`/api/organizations/${state.selectedTenantId}/users`, { method: 'POST', body: JSON.stringify(payload) });
   event.currentTarget.reset();
-  showToast('Member saved');
+  showToast('Member saved', 'success');
   await refresh();
 };
 
 const submitLlmCredential = async (event) => {
   event.preventDefault();
-  if (!can('can_manage_llm_credentials')) return showToast('LLM key management is not allowed for this role');
+  if (!can('can_manage_llm_credentials')) return showToast('LLM key management is not allowed for this role', 'warning');
   const payload = formData(event.currentTarget);
   await api(`/api/organizations/${state.selectedTenantId}/llm-credentials`, { method: 'POST', body: JSON.stringify(payload) });
   event.currentTarget.reset();
-  showToast('LLM key saved');
+  showToast('LLM key saved', 'success');
   await refresh();
 };
 
 const disableCredential = async (credentialId) => {
-  if (!can('can_manage_llm_credentials')) return showToast('LLM key management is not allowed for this role');
+  if (!can('can_manage_llm_credentials')) return showToast('LLM key management is not allowed for this role', 'warning');
   await api(`/api/organizations/${state.selectedTenantId}/llm-credentials/${credentialId}`, {
     method: 'PATCH',
     body: JSON.stringify({ status: 'DISABLED' })
   });
-  showToast('Credential disabled');
+  showToast('Credential disabled', 'warning');
   await refresh();
 };
 
 const testCredential = async (credentialId) => {
-  if (!can('can_manage_llm_credentials')) return showToast('LLM key management is not allowed for this role');
+  if (!can('can_manage_llm_credentials')) return showToast('LLM key management is not allowed for this role', 'warning');
   const result = await api(`/api/organizations/${state.selectedTenantId}/llm-credentials/${credentialId}/test`, { method: 'POST' });
-  showToast(result.message || `Credential test ${result.status}`);
+  showToast(result.message || `Credential test ${result.status}`, result.status === 'passed' ? 'success' : 'error');
   await refresh();
 };
 
 const updateStatus = async (leadId, nextStatus) => {
-  if (!can('can_update_lead_status')) return showToast('Lead status updates are not allowed for this role');
+  if (!can('can_update_lead_status')) return showToast('Lead status updates are not allowed for this role', 'warning');
   await api(`/api/leads/${leadId}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status: nextStatus, organization_id: Number(state.selectedTenantId) })
   });
   $('#leadDialog').close();
-  showToast(`Lead marked ${nextStatus}`);
+  showToast(`Lead marked ${nextStatus}`, statusVariant(nextStatus));
   await refresh();
 };
 
@@ -1110,7 +1120,7 @@ const boot = async () => {
     await refresh();
   } catch (error) {
     showAuthGate(error.message || 'Authentication could not be initialized.');
-    showToast(error.message || 'Authentication could not be initialized.');
+    showToast(error.message || 'Authentication could not be initialized.', 'error');
   }
 };
 

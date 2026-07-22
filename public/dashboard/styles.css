@@ -8,9 +8,17 @@
   --nav: #0f171b;
   --nav-2: #172228;
   --green: #18a058;
+  --green-bg: #e9f8ef;
+  --green-ink: #0b7a42;
   --blue: #2563eb;
+  --blue-bg: #edf4ff;
+  --blue-ink: #1d4ed8;
   --amber: #b7791f;
+  --amber-bg: #fff7e6;
+  --amber-ink: #9a5d00;
   --red: #c2413a;
+  --red-bg: #fff0ef;
+  --red-ink: #a1302a;
   --cyan: #0e7490;
   --shadow: 0 18px 50px rgba(15, 23, 27, 0.09);
 }
@@ -455,25 +463,24 @@ th {
   white-space: nowrap;
 }
 
-.status.ACTIVE,
-.status.ready,
-.status.delivered,
-.status.approved {
-  background: #e9f8ef;
-  color: #0b7a42;
+.status.success {
+  background: var(--green-bg);
+  color: var(--green-ink);
 }
 
-.status.processing,
-.status.pending {
-  background: #fff7e6;
-  color: #9a5d00;
+.status.warning {
+  background: var(--amber-bg);
+  color: var(--amber-ink);
 }
 
-.status.rejected,
-.status.archived,
-.status.SUSPENDED {
-  background: #fff0ef;
-  color: #a1302a;
+.status.error {
+  background: var(--red-bg);
+  color: var(--red-ink);
+}
+
+.status.info {
+  background: var(--blue-bg);
+  color: var(--blue-ink);
 }
 
 .form-grid {
@@ -624,6 +631,22 @@ dialog::backdrop {
   opacity: 0;
   pointer-events: none;
   transition: 160ms ease;
+}
+
+.toast.success {
+  background: var(--green-ink);
+}
+
+.toast.warning {
+  background: var(--amber-ink);
+}
+
+.toast.error {
+  background: var(--red-ink);
+}
+
+.toast.info {
+  background: var(--ink);
 }
 
 .toast.show {
