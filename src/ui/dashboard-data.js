@@ -13,6 +13,7 @@ import { callGroq } from '../llm/providers/groq.js';
 import { callOpenAICompatible } from '../llm/providers/openai-compatible.js';
 import { callOpenRouter } from '../llm/providers/openrouter.js';
 import { decryptSecret, encryptSecret } from '../utils/secrets.js';
+import { getWhatsAppSessionStatus } from '../agents/monitor.js';
 
 const isSaaSMode = () => !!process.env.DATABASE_URL;
 const DEFAULT_CLASSIFIER_SYSTEM_PROMPT = 'Classify inbound messages for this tenant. Treat a message as a lead only when it shows real buying, booking, inquiry, support, or service intent for this tenant business. Return valid JSON using the required schema.';
@@ -965,6 +966,139 @@ export async function getTenantDashboard(organizationId) {
     usage: firstRow(usage.rows, emptyUsage),
     leads: leads.rows.map(mapLead),
     contacts: contacts.rows
+  };
+}
+
+const channelHealth = (configured, runtimeStatus = null) => {
+  if (!configured) return 'not_configured';
+  if (runtimeStatus) return runtimeStatus;
+  return 'configured';
+};
+
+export async function getTenantChannels(organizationId) {
+  ensureSaaSMode('Tenant channels require DATABASE_URL SaaS mode.');
+  const orgId = Number(organizationId);
+  const [config, recent] = await Promise.all([
+    query(
+      `SELECT t.wa_session_id,
+              t.telegram_chat_id,
+              t.wc_base_url,
+              t.llm_routing_mode,
+              CASE WHEN t.telegram_bot_token_secret IS NULL OR t.telegram_bot_token_secret = '' THEN false ELSE true END AS telegram_bot_token_configured,
+              CASE WHEN t.meta_access_token_secret IS NULL OR t.meta_access_token_secret = '' THEN false ELSE true END AS meta_access_token_configured,
+              CASE WHEN t.wc_consumer_key_secret IS NULL OR t.wc_consumer_key_secret = '' THEN false ELSE true END AS wc_consumer_key_configured,
+              CASE WHEN t.wc_consumer_secret_secret IS NULL OR t.wc_consumer_secret_secret = '' THEN false ELSE true END AS wc_consumer_secret_configured
+         FROM tenant_configs t
+        WHERE t.organization_id = $1`,
+      [orgId]
+    ),
+    query(
+      `SELECT source_platform,
+              COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours')::int AS messages_24h,
+              MAX(created_at) AS last_received_at,
+              MAX(updated_at) AS last_status_at,
+              COUNT(*) FILTER (WHERE status = 'error')::int AS errors_24h
+         FROM inbound_message_events
+        WHERE organization_id = $1
+        GROUP BY source_platform`,
+      [orgId]
+    ).catch((error) => {
+      if (error?.code === '42P01') return { rows: [] };
+      throw error;
+    })
+  ]);
+
+  if (config.rowCount === 0) {
+    throw Object.assign(new Error('Tenant configuration not found.'), { statusCode: 404 });
+  }
+
+  const cfg = config.rows[0];
+  const activityByPlatform = Object.fromEntries(recent.rows.map((row) => [row.source_platform, row]));
+  const whatsappRuntime = getWhatsAppSessionStatus(cfg.wa_session_id);
+  const wooConfigured = Boolean(cfg.wc_base_url && cfg.wc_consumer_key_configured && cfg.wc_consumer_secret_configured);
+  const telegramConfigured = Boolean(cfg.telegram_bot_token_configured && cfg.telegram_chat_id);
+
+  return {
+    channels: [
+      {
+        id: 'whatsapp',
+        name: 'WhatsApp listener',
+        type: 'inbound',
+        status: channelHealth(Boolean(cfg.wa_session_id), whatsappRuntime.status),
+        configured: Boolean(cfg.wa_session_id),
+        details: [
+          cfg.wa_session_id ? `Session: ${cfg.wa_session_id}` : 'Session missing',
+          whatsappRuntime.status === 'qr_required' ? 'QR scan required from server logs' : null,
+          whatsappRuntime.should_reconnect === false ? 'Automatic reconnect stopped' : null
+        ].filter(Boolean),
+        runtime: whatsappRuntime,
+        activity: activityByPlatform.whatsapp || null
+      },
+      {
+        id: 'meta',
+        name: 'Facebook / Instagram webhook',
+        type: 'inbound',
+        status: channelHealth(Boolean(cfg.meta_access_token_configured), 'ready'),
+        configured: Boolean(cfg.meta_access_token_configured),
+        details: [
+          cfg.meta_access_token_configured ? 'Tenant Meta token configured' : 'Tenant Meta token missing',
+          process.env.META_WEBHOOK_VERIFY_TOKEN ? 'Webhook verification token configured' : 'Webhook verification token missing'
+        ],
+        webhook_path: '/webhooks/meta?tenant=' + encodeURIComponent(cfg.wa_session_id || String(orgId)),
+        activity: activityByPlatform.facebook || activityByPlatform.instagram || null
+      },
+      {
+        id: 'tiktok',
+        name: 'TikTok webhook',
+        type: 'inbound',
+        status: 'available',
+        configured: true,
+        details: ['Webhook adapter available; configure the tenant URL in TikTok if used.'],
+        webhook_path: '/webhooks/tiktok?tenant=' + encodeURIComponent(cfg.wa_session_id || String(orgId)),
+        activity: activityByPlatform.tiktok || null
+      },
+      {
+        id: 'test',
+        name: 'Test webhook',
+        type: 'inbound',
+        status: 'available',
+        configured: true,
+        details: ['Use this to test the full pipeline without external platforms.'],
+        webhook_path: '/webhooks/test?tenant=' + encodeURIComponent(cfg.wa_session_id || String(orgId)),
+        activity: activityByPlatform.test || null
+      },
+      {
+        id: 'telegram',
+        name: 'Telegram delivery',
+        type: 'outbound',
+        status: channelHealth(telegramConfigured),
+        configured: telegramConfigured,
+        details: [
+          cfg.telegram_bot_token_configured ? 'Bot token configured' : 'Bot token missing',
+          cfg.telegram_chat_id ? `Chat ID: ${cfg.telegram_chat_id}` : 'Chat ID missing'
+        ]
+      },
+      {
+        id: 'woocommerce',
+        name: 'WooCommerce inventory',
+        type: 'integration',
+        status: channelHealth(wooConfigured),
+        configured: wooConfigured,
+        details: [
+          cfg.wc_base_url ? `URL: ${cfg.wc_base_url}` : 'URL missing',
+          cfg.wc_consumer_key_configured ? 'Consumer key configured' : 'Consumer key missing',
+          cfg.wc_consumer_secret_configured ? 'Consumer secret configured' : 'Consumer secret missing'
+        ]
+      },
+      {
+        id: 'llm',
+        name: 'LLM routing',
+        type: 'pipeline',
+        status: 'configured',
+        configured: true,
+        details: [`Routing mode: ${cfg.llm_routing_mode || 'cost_optimized'}`]
+      }
+    ]
   };
 }
 

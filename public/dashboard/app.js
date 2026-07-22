@@ -6,6 +6,7 @@ const state = {
   members: [],
   credentials: [],
   llmPolicy: null,
+  channels: [],
   events: [],
   organizations: [],
   actor: null,
@@ -27,6 +28,7 @@ const state = {
 const routeByView = {
   admin: '/admin',
   tenant: '/tenant',
+  channels: '/channels',
   leads: '/tenant/leads',
   settings: '/tenant/settings',
   plans: '/plans',
@@ -39,6 +41,7 @@ const routeByView = {
 const viewIdByView = {
   admin: 'adminView',
   tenant: 'tenantView',
+  channels: 'channelsView',
   leads: 'leadsView',
   settings: 'settingsView',
   plans: 'plansView',
@@ -51,6 +54,7 @@ const viewIdByView = {
 const viewByPath = {
   '/admin': 'admin',
   '/tenant': 'tenant',
+  '/channels': 'channels',
   '/tenant/leads': 'leads',
   '/tenant/settings': 'settings',
   '/plans': 'plans',
@@ -417,9 +421,9 @@ const metricCard = (label, value, detail) => `
 
 const statusVariant = (value) => {
   const normalized = String(value || '').toUpperCase().replace(/\s+/g, '_');
-  if (['ACTIVE', 'READY', 'DELIVERED', 'APPROVED', 'TRIALING', 'PLAN_ALLOWS', 'PASSED'].includes(normalized)) return 'success';
-  if (['PROCESSING', 'PENDING', 'INVITED', 'NONE'].includes(normalized)) return 'warning';
-  if (['REJECTED', 'ARCHIVED', 'SUSPENDED', 'DISABLED', 'PLAN_BLOCKS', 'FAILED'].includes(normalized)) return 'error';
+  if (['ACTIVE', 'READY', 'DELIVERED', 'APPROVED', 'TRIALING', 'PLAN_ALLOWS', 'PASSED', 'CONNECTED', 'CONFIGURED', 'AVAILABLE'].includes(normalized)) return 'success';
+  if (['PROCESSING', 'PENDING', 'INVITED', 'NONE', 'STARTING', 'QR_REQUIRED', 'QR_TIMEOUT', 'NOT_STARTED', 'NOT_CONFIGURED'].includes(normalized)) return 'warning';
+  if (['REJECTED', 'ARCHIVED', 'SUSPENDED', 'DISABLED', 'PLAN_BLOCKS', 'FAILED', 'DISCONNECTED', 'LOGGED_OUT'].includes(normalized)) return 'error';
   return 'info';
 };
 
@@ -438,6 +442,7 @@ const can = (capability) => Boolean(
 const canAccessView = (view) => ({
   admin: Boolean(state.actor?.system_owner),
   tenant: can('can_view_tenant'),
+  channels: can('can_view_tenant'),
   leads: can('can_review_leads'),
   settings: can('can_manage_config'),
   plans: can('can_manage_subscription_plans') || can('can_choose_subscription_plan'),
@@ -449,7 +454,7 @@ const canAccessView = (view) => ({
 
 const firstAllowedView = () => {
   if (state.actor?.system_owner && canAccessView('admin')) return 'admin';
-  return ['tenant', 'leads', 'settings', 'plans', 'usage', 'organization', 'llm', 'compliance', 'admin'].find(canAccessView) || 'tenant';
+  return ['tenant', 'channels', 'leads', 'settings', 'plans', 'usage', 'organization', 'llm', 'compliance', 'admin'].find(canAccessView) || 'tenant';
 };
 
 const renderShellAccess = () => {
@@ -475,6 +480,7 @@ const setView = (view) => {
   $('#pageTitle').textContent = {
     admin: 'Admin control',
     tenant: 'Tenant workspace',
+    channels: 'Channels',
     leads: 'Lead review',
     settings: 'Configuration',
     plans: 'Plans',
@@ -592,6 +598,40 @@ const renderTenant = () => {
   renderLeads();
   renderUsage();
   renderUsageDetail();
+};
+
+const renderChannels = () => {
+  const channels = state.channels || [];
+  const grid = $('#channelsGrid');
+  if (!grid) return;
+
+  grid.innerHTML = channels.map((channel) => {
+    const activity = channel.activity || {};
+    const runtime = channel.runtime || {};
+    const detailRows = [
+      ...(channel.details || []),
+      channel.webhook_path ? `Path: ${channel.webhook_path}` : null,
+      activity.last_received_at ? `Last received: ${safeText(activity.last_received_at)}` : null,
+      activity.messages_24h != null ? `Messages in 24h: ${fmt.format(activity.messages_24h || 0)}` : null,
+      runtime.last_message_at ? `Last runtime message: ${safeText(runtime.last_message_at)}` : null,
+      runtime.last_error ? `Last error: ${safeText(runtime.last_error)}` : null
+    ].filter(Boolean);
+
+    return `
+      <article class="channel-card">
+        <div class="channel-card-header">
+          <div>
+            <strong>${safeText(channel.name)}</strong>
+            <small>${safeText(channel.type)}</small>
+          </div>
+          ${status(channel.status)}
+        </div>
+        <div class="channel-details">
+          ${detailRows.map((item) => `<span>${safeText(item)}</span>`).join('') || '<span>No details available.</span>'}
+        </div>
+      </article>
+    `;
+  }).join('') || '<p>No channel data available.</p>';
 };
 
 const renderLeads = () => {
@@ -841,6 +881,12 @@ const loadManagementData = async () => {
     state.members = [];
   }
 
+  if (canAccessView('channels') && Number(orgId) > 0) {
+    state.channels = (await api(`/api/tenants/${orgId}/channels`)).channels || [];
+  } else {
+    state.channels = [];
+  }
+
   if (canAccessView('llm') && Number(orgId) > 0) {
     const llmData = await api(`/api/organizations/${orgId}/llm-credentials`);
     state.credentials = llmData.credentials || [];
@@ -869,6 +915,7 @@ const refresh = async () => {
     await loadManagementData();
     renderAdmin();
     renderTenant();
+    renderChannels();
     renderPlans();
     renderOrganization();
     renderLlmCredentials();
@@ -965,6 +1012,7 @@ const manageOrganizationPlan = async (organizationId) => {
   await loadManagementData();
   setView('plans');
   renderTenant();
+  renderChannels();
   renderPlans();
   renderOrganization();
 };
@@ -1046,6 +1094,7 @@ const bindEvents = () => {
     state.tenant = await api(`/api/tenants/${state.selectedTenantId}`);
     await loadManagementData();
     renderTenant();
+    renderChannels();
     renderPlans();
     renderOrganization();
     renderLlmCredentials();

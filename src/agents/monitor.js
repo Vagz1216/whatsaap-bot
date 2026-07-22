@@ -10,6 +10,29 @@ const dataDir = path.resolve(process.env.DATA_DIR || path.join(__dirname, '../..
 
 const logger = pino({ level: 'silent' });
 const groupNameCache = new Map();
+const whatsappSessionStatus = new Map();
+
+const setWhatsAppSessionStatus = (sessionId, patch) => {
+  if (!sessionId) return;
+  const previous = whatsappSessionStatus.get(sessionId) || {};
+  whatsappSessionStatus.set(sessionId, {
+    session_id: sessionId,
+    status: 'starting',
+    ...previous,
+    ...patch,
+    updated_at: new Date().toISOString()
+  });
+};
+
+export const getWhatsAppSessionStatus = (sessionId) => {
+  const status = whatsappSessionStatus.get(sessionId) || {
+    session_id: sessionId || null,
+    status: sessionId ? 'not_started' : 'not_configured',
+    updated_at: null
+  };
+  const { auth_path, ...publicStatus } = status;
+  return publicStatus;
+};
 
 const getGroupName = async (sock, groupJid) => {
   if (!groupJid) return 'WhatsApp Group';
@@ -37,6 +60,13 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
   const authPath = isSaaS 
     ? path.join(dataDir, `wa-auth-${tenantConfig.wa_session_id}`) 
     : path.join(dataDir, 'wa-auth');
+  const sessionId = isSaaS ? tenantConfig.wa_session_id : 'local';
+  setWhatsAppSessionStatus(sessionId, {
+    organization_id: tenantConfig?.organization_id || null,
+    tenant: tenantName,
+    auth_path: authPath,
+    status: 'starting'
+  });
 
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
 
@@ -51,6 +81,11 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
     const { connection, lastDisconnect, qr } = update;
     
     if (qr) {
+      setWhatsAppSessionStatus(sessionId, {
+        status: 'qr_required',
+        last_qr_at: new Date().toISOString(),
+        last_error: null
+      });
       console.log(`[Tenant: ${tenantName}] Scan this QR code to authenticate:`);
       qrcode.generate(qr, { small: true });
     }
@@ -63,6 +98,12 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 408;
       
       console.log(`[Tenant: ${tenantName}] WhatsApp connection closed. Reconnecting:`, shouldReconnect);
+      setWhatsAppSessionStatus(sessionId, {
+        status: statusCode === DisconnectReason.loggedOut ? 'logged_out' : statusCode === 408 ? 'qr_timeout' : 'disconnected',
+        should_reconnect: shouldReconnect,
+        last_disconnect_code: statusCode || null,
+        last_error: lastDisconnect?.error?.message || null
+      });
       if (shouldReconnect) {
         // Add a 5 second delay to avoid hammering the servers on other transient errors
         setTimeout(() => startMonitor(tenantConfigOrCb, cbIfTenant), 5000);
@@ -70,6 +111,11 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
         console.log(`[Tenant: ${tenantName}] QR Code generation timed out. Please restart the server when you are ready to scan.`);
       }
     } else if (connection === 'open') {
+      setWhatsAppSessionStatus(sessionId, {
+        status: 'connected',
+        connected_at: new Date().toISOString(),
+        last_error: null
+      });
       console.log(`[Tenant: ${tenantName}] WhatsApp connection opened. Monitoring messages...`);
     }
   });
@@ -80,6 +126,9 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
     try {
       const msg = m.messages[0];
       if (!msg.message || msg.key.fromMe) return;
+      setWhatsAppSessionStatus(sessionId, {
+        last_message_at: new Date().toISOString()
+      });
 
       const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
       if (text.length < 15) return; // Ignore very short messages

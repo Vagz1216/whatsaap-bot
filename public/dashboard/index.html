@@ -38,6 +38,10 @@
             <span class="icon">T</span>
             Tenant workspace
           </button>
+          <button class="nav-item" data-view="channels" type="button">
+            <span class="icon">H</span>
+            Channels
+          </button>
           <button class="nav-item" data-view="leads" type="button">
             <span class="icon">L</span>
             Lead review
@@ -191,6 +195,18 @@
               <div class="compact-list" id="contactsList"></div>
             </section>
           </div>
+        </section>
+
+        <section class="view" id="channelsView">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Channels</h2>
+                <p>Listener, webhook, delivery, and integration readiness for the selected tenant.</p>
+              </div>
+            </div>
+            <div class="channel-grid" id="channelsGrid"></div>
+          </section>
         </section>
 
         <section class="view" id="leadsView">

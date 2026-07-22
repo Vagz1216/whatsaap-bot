@@ -8,6 +8,7 @@ import {
   createSubscriptionPlan,
   getAdminOverview,
   getOrganizationSubscription,
+  getTenantChannels,
   getTenantDashboard,
   listComplianceEvents,
   listOrganizationLlmCredentials,
@@ -110,6 +111,7 @@ const serveStatic = (res, pathname) => {
   const shellRoutes = new Set([
     '/admin',
     '/tenant',
+    '/channels',
     '/tenant/leads',
     '/tenant/settings',
     '/dashboard',
@@ -301,6 +303,14 @@ const handleApi = async (req, res, url) => {
       const orgId = Number(tenantMatch[1]);
       await requireOrganizationRole(actor, orgId, READ_ROLES);
       sendJson(res, 200, await getTenantDashboard(orgId));
+      return true;
+    }
+
+    const tenantChannelsMatch = pathname.match(/^\/api\/tenants\/(\d+)\/channels$/);
+    if (req.method === 'GET' && tenantChannelsMatch) {
+      const orgId = Number(tenantChannelsMatch[1]);
+      await requireOrganizationRole(actor, orgId, READ_ROLES);
+      sendJson(res, 200, await getTenantChannels(orgId));
       return true;
     }
 
