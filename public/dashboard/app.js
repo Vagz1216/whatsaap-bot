@@ -16,6 +16,9 @@ const state = {
     refreshingFromClerk: false,
     blocked: false
   },
+  forms: {
+    configDirty: false
+  },
   selectedTenantId: localStorage.getItem('stayez:selectedTenantId') || '0',
   token: localStorage.getItem('stayez:dashboardToken') || '',
   statusFilter: 'all'
@@ -560,7 +563,7 @@ const renderTenant = () => {
 
   const config = data.config || {};
   const configForm = $('#configForm');
-  if (configForm && canAccessView('settings')) {
+  if (configForm && canAccessView('settings') && !state.forms.configDirty) {
     configForm.llm_routing_mode.value = config.llm_routing_mode || 'balanced';
     configForm.default_language.value = config.default_language || 'en';
     configForm.wc_base_url.value = config.wc_base_url || '';
@@ -908,6 +911,7 @@ const submitConfig = async (event) => {
   if (!payload.wc_consumer_secret_secret) delete payload.wc_consumer_secret_secret;
   if (!payload.meta_access_token_secret) delete payload.meta_access_token_secret;
   await api(`/api/tenants/${state.selectedTenantId}/config`, { method: 'PATCH', body: JSON.stringify(payload) });
+  state.forms.configDirty = false;
   showToast('Configuration updated');
   await refresh();
 };
@@ -1022,6 +1026,7 @@ const bindEvents = () => {
   $('#tenantSelect').addEventListener('change', async (event) => {
     state.selectedTenantId = event.target.value;
     localStorage.setItem('stayez:selectedTenantId', state.selectedTenantId);
+    state.forms.configDirty = false;
     tenantCache = null;
     $('#contactOrganizationId').value = state.selectedTenantId;
     state.tenant = await api(`/api/tenants/${state.selectedTenantId}`);
@@ -1046,6 +1051,9 @@ const bindEvents = () => {
   $('#organizationForm').addEventListener('submit', submitOrganization);
   $('#contactForm').addEventListener('submit', submitContact);
   $('#configForm').addEventListener('submit', submitConfig);
+  $('#configForm').addEventListener('input', () => {
+    state.forms.configDirty = true;
+  });
   $('#planForm').addEventListener('submit', submitPlan);
   $('#organizationEditForm').addEventListener('submit', submitOrganizationEdit);
   $('#memberForm').addEventListener('submit', submitMember);
