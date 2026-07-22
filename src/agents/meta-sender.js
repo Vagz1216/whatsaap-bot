@@ -12,7 +12,7 @@ export const sendMetaMessage = async (platform, recipientId, messageText, tenant
   const accessToken = isSaaS ? tenantConfig.meta_access_token_secret : process.env.META_ACCESS_TOKEN;
   
   if (!accessToken) {
-    throw new Error('META_ACCESS_TOKEN is not configured.');
+    throw new Error(isSaaS ? 'Tenant Meta access token is not configured.' : 'META_ACCESS_TOKEN is not configured.');
   }
 
   // Both FB and IG use the same /me/messages endpoint when using a Page Access Token

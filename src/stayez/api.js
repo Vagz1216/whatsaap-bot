@@ -2,19 +2,32 @@ import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 dotenv.config();
 
+export const hasTenantWooCommerceConfig = (tenantConfig = null) => Boolean(
+  tenantConfig?.wc_base_url &&
+  tenantConfig?.wc_consumer_key_secret &&
+  tenantConfig?.wc_consumer_secret_secret
+);
+
 const withAuth = (url, tenantConfig = null) => {
-  const isSaaS = tenantConfig !== null && tenantConfig.wc_consumer_key_secret;
+  const isSaaS = tenantConfig !== null;
+  if (isSaaS && !hasTenantWooCommerceConfig(tenantConfig)) {
+    throw new Error('Tenant WooCommerce credentials are not configured.');
+  }
+
   const key = isSaaS ? tenantConfig.wc_consumer_key_secret : process.env.WC_CONSUMER_KEY;
   const secret = isSaaS ? tenantConfig.wc_consumer_secret_secret : process.env.WC_CONSUMER_SECRET;
 
   if (!key || !secret) return url; // Let it fail cleanly if no keys
 
   const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}consumer_key=${key}&consumer_secret=${secret}`;
+  return `${url}${separator}consumer_key=${encodeURIComponent(key)}&consumer_secret=${encodeURIComponent(secret)}`;
 };
 
 const getBaseUrl = (tenantConfig = null) => {
-  const isSaaS = tenantConfig !== null && tenantConfig.wc_base_url;
+  const isSaaS = tenantConfig !== null;
+  if (isSaaS && !hasTenantWooCommerceConfig(tenantConfig)) {
+    throw new Error('Tenant WooCommerce credentials are not configured.');
+  }
   return isSaaS ? tenantConfig.wc_base_url : (process.env.WC_BASE_URL || 'https://stayez.co.ke');
 }
 
@@ -37,8 +50,8 @@ export const searchProperties = async (criteria, tenantConfig = null) => {
   return response.json();
 };
 
-export const getVendors = async () => {
-  const url = withAuth(`${BASE_URL}/wp-json/dokan/v1/stores?per_page=100`);
+export const getVendors = async (tenantConfig = null) => {
+  const url = withAuth(`${getBaseUrl(tenantConfig)}/wp-json/dokan/v1/stores?per_page=100`, tenantConfig);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to get vendors: ${response.statusText}`);
@@ -46,8 +59,8 @@ export const getVendors = async () => {
   return response.json();
 };
 
-export const getVendor = async (vendorId) => {
-  const url = withAuth(`${BASE_URL}/wp-json/dokan/v1/stores/${vendorId}`);
+export const getVendor = async (vendorId, tenantConfig = null) => {
+  const url = withAuth(`${getBaseUrl(tenantConfig)}/wp-json/dokan/v1/stores/${vendorId}`, tenantConfig);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to get vendor ${vendorId}: ${response.statusText}`);
@@ -55,8 +68,8 @@ export const getVendor = async (vendorId) => {
   return response.json();
 };
 
-export const createOrder = async (orderData) => {
-  const url = withAuth(`${BASE_URL}/wp-json/wc/v3/orders`);
+export const createOrder = async (orderData, tenantConfig = null) => {
+  const url = withAuth(`${getBaseUrl(tenantConfig)}/wp-json/wc/v3/orders`, tenantConfig);
   const response = await fetch(url, {
     method: 'POST',
     headers: {

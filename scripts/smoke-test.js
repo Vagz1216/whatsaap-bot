@@ -5,6 +5,7 @@ import { validateDraftMessage, validateInboundMessage, GuardrailError } from '..
 import { normalizeInboundMessage } from '../src/schema/inbound-message.js';
 import { extractMetaMessages } from '../src/adapters/meta.js';
 import { extractTikTokMessages } from '../src/adapters/tiktok.js';
+import { hasTenantWooCommerceConfig } from '../src/stayez/api.js';
 
 const requiredFiles = [
   'package-lock.json',
@@ -59,6 +60,17 @@ if (normalized.source_channel !== 'whatsapp_group') {
 }
 if (normalized.contactability_status !== 'manual_group_reply_required') {
   throw new Error('Normalizer failed to mark hidden sender as manual reply.');
+}
+
+if (hasTenantWooCommerceConfig({ wc_base_url: 'https://tenant.example', wc_consumer_key_secret: 'ck' })) {
+  throw new Error('Tenant WooCommerce config should require URL, key, and secret.');
+}
+if (!hasTenantWooCommerceConfig({
+  wc_base_url: 'https://tenant.example',
+  wc_consumer_key_secret: 'ck',
+  wc_consumer_secret_secret: 'cs'
+})) {
+  throw new Error('Tenant WooCommerce config completeness check failed.');
 }
 
 const metaMessages = extractMetaMessages({

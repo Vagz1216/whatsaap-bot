@@ -33,8 +33,8 @@ const findNearbyContacts = async (extractedData, tenantConfig) => {
  */
 export const runMatcher = async (extractedData, tenantConfigOrMissing = {}) => {
   try {
-    // Handle dual-mode: if an array is passed (legacy), treat as missingDetails
-    // If an object is passed (SaaS or empty), treat as tenantConfig
+    // Handle dual-mode: if an array is passed (legacy), treat as missingDetails.
+    // Only an organization-scoped tenant config is SaaS; plain objects are local compatibility.
     const missingDetails = Array.isArray(tenantConfigOrMissing) ? tenantConfigOrMissing : [];
 
     // If critical details are missing, we skip matching completely
@@ -55,7 +55,11 @@ export const runMatcher = async (extractedData, tenantConfigOrMissing = {}) => {
     // Soft-filter catalog items based on API
     let matchedProperties = [];
     let wooCommerceError = false;
-    const isSaaS = !Array.isArray(tenantConfigOrMissing);
+    const isSaaS = Boolean(
+      tenantConfigOrMissing &&
+      !Array.isArray(tenantConfigOrMissing) &&
+      tenantConfigOrMissing.organization_id
+    );
     
     try {
       const response = await searchProperties(criteria, isSaaS ? tenantConfigOrMissing : null);

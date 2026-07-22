@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const REQUIRED_ENV = [
+const REQUIRED_SINGLE_TENANT_ENV = [
   'WC_BASE_URL',
   'WC_CONSUMER_KEY',
   'WC_CONSUMER_SECRET',
@@ -26,8 +26,10 @@ const PLACEHOLDER_VALUES = new Set([
 export const getDataDir = () => path.resolve(process.env.DATA_DIR || path.join(process.cwd(), 'data'));
 
 export const validateEnv = () => {
-  const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
-  const placeholders = REQUIRED_ENV.filter((name) => PLACEHOLDER_VALUES.has(process.env[name]));
+  const isSaaSMode = Boolean(process.env.DATABASE_URL);
+  const requiredIntegrationEnv = isSaaSMode ? [] : REQUIRED_SINGLE_TENANT_ENV;
+  const missing = requiredIntegrationEnv.filter((name) => !process.env[name]);
+  const placeholders = requiredIntegrationEnv.filter((name) => PLACEHOLDER_VALUES.has(process.env[name]));
   const hasCompleteAzure = Boolean(
     process.env.AZURE_OPENAI_API_KEY &&
     process.env.AZURE_OPENAI_ENDPOINT &&

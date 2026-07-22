@@ -3,6 +3,7 @@ import { runMatcher } from '../agents/matcher.js';
 import { runDrafter } from '../agents/drafter.js';
 import { fetchMetaProfile } from '../agents/meta-sender.js';
 import { sendCards } from '../telegram/index.js';
+import { hasTenantWooCommerceConfig } from '../stayez/api.js';
 import db from '../db/index.js';
 import { query } from '../db/pg.js';
 import { claimInboundMessage, markInboundMessageStatus } from '../db/listener-state.js';
@@ -257,7 +258,7 @@ export const processMessage = async (msgData, tenantConfig = null) => {
     metrics.t_match_draft_start = Date.now();
     let matchResult = null;
     let drafts = { draft_to_client: null, draft_to_matched_host: null, drafts_to_nearby_hosts: null };
-    const hasInventoryApi = isSaaS ? (tenantConfig.wc_base_url && tenantConfig.wc_consumer_key_secret) : !!process.env.WC_BASE_URL;
+    const hasInventoryApi = isSaaS ? hasTenantWooCommerceConfig(tenantConfig) : !!process.env.WC_BASE_URL;
     
     if (lead.missing_critical_details && lead.missing_critical_details.length > 0) {
       logger.info({ request_id: requestId, kind: 'matcher_skipped', missing_details: lead.missing_critical_details }, `${logPrefix} Lead missing details`);
