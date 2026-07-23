@@ -1,15 +1,10 @@
+import './config/load-env.js';
 import { startMonitor } from './agents/monitor.js';
 import { processMessage } from './pipeline/index.js';
 import { validateEnv } from './config/env.js';
 import { startWebhookServer } from './adapters/webhook-server.js';
-import dotenv from 'dotenv';
 import pino from 'pino';
 import { fileURLToPath } from 'url';
-
-dotenv.config();
-
-// Ensure timezone is set properly for the entire application
-process.env.TZ = process.env.TZ || 'Africa/Nairobi';
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
