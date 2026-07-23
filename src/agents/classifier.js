@@ -86,7 +86,14 @@ const parseClassifierOutput = (result) => {
 export const runClassifier = async (messageText, tenantConfig = null, sourceContext = {}) => {
   const MAX_RETRIES = 2;
   const hasCustomPrompt = tenantConfig !== null && tenantConfig.classifier_system_prompt && tenantConfig.classifier_system_prompt.length > 50;
-  const finalSystemPrompt = hasCustomPrompt ? tenantConfig.classifier_system_prompt : systemPrompt;
+  const finalSystemPrompt = hasCustomPrompt
+    ? `${systemPrompt}
+
+Tenant-specific business rules:
+${tenantConfig.classifier_system_prompt}
+
+The tenant-specific rules define what counts as a valid lead for this tenant. They do not replace the required JSON schema above.`
+    : systemPrompt;
 
   const contextualMessage = [
     `[source_platform=${sourceContext.source_platform || 'whatsapp'}]`,

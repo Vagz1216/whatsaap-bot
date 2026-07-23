@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
 
-dotenv.config({ override: true });
+dotenv.config();
 
 process.env.TZ = process.env.TZ || 'Africa/Nairobi';
