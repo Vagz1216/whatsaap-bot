@@ -14,6 +14,8 @@ import { callOpenAICompatible } from '../llm/providers/openai-compatible.js';
 import { callOpenRouter } from '../llm/providers/openrouter.js';
 import { decryptSecret, encryptSecret } from '../utils/secrets.js';
 import { getWhatsAppSessionStatus } from '../agents/monitor.js';
+import { listChannelRuntime } from '../db/channel-runtime.js';
+import { ensureTenantChannelColumns } from '../db/tenant.js';
 
 const isSaaSMode = () => !!process.env.DATABASE_URL;
 const DEFAULT_CLASSIFIER_SYSTEM_PROMPT = 'Classify inbound messages for this tenant. Treat a message as a lead only when it shows real buying, booking, inquiry, support, or service intent for this tenant business. Return valid JSON using the required schema.';
@@ -494,6 +496,7 @@ export async function createOrganization(input, actor = null) {
   if (!isSaaSMode()) {
     throw Object.assign(new Error('Organizations require DATABASE_URL SaaS mode.'), { statusCode: 400 });
   }
+  await ensureTenantChannelColumns();
 
   const name = String(input.name || '').trim();
   const slug = cleanSlug(input.slug || name);
@@ -527,9 +530,11 @@ export async function createOrganization(input, actor = null) {
     `INSERT INTO tenant_configs (
        organization_id, wa_session_id, telegram_bot_token_secret, telegram_chat_id,
        meta_access_token_secret, wc_base_url, wc_consumer_key_secret, wc_consumer_secret_secret,
+       whatsapp_cloud_enabled, whatsapp_cloud_phone_number_id, whatsapp_cloud_waba_id,
+       whatsapp_cloud_display_number, whatsapp_cloud_access_token_secret,
        classifier_system_prompt, keyword_whitelist, keyword_blacklist, drafter_persona,
        default_language, llm_routing_mode
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
     [
       orgId,
       waSessionId,
@@ -539,6 +544,11 @@ export async function createOrganization(input, actor = null) {
       input.wc_base_url || null,
       input.wc_consumer_key_secret || null,
       input.wc_consumer_secret_secret || null,
+      boolToInt(input.whatsapp_cloud_enabled),
+      input.whatsapp_cloud_phone_number_id || null,
+      input.whatsapp_cloud_waba_id || null,
+      input.whatsapp_cloud_display_number || null,
+      input.whatsapp_cloud_access_token_secret || null,
       input.classifier_system_prompt || DEFAULT_CLASSIFIER_SYSTEM_PROMPT,
       JSON.stringify(input.keyword_whitelist?.length ? input.keyword_whitelist : DEFAULT_KEYWORD_WHITELIST),
       JSON.stringify(input.keyword_blacklist?.length ? input.keyword_blacklist : DEFAULT_KEYWORD_BLACKLIST),
@@ -917,13 +927,17 @@ export async function getTenantDashboard(organizationId) {
     };
   }
 
+  await ensureTenantChannelColumns();
   const [org, config, stats, usage, leads, contacts] = await Promise.all([
     query('SELECT id, name, slug, status, timezone, created_at FROM organizations WHERE id = $1', [orgId]),
     query(`SELECT wa_session_id, telegram_chat_id, wc_base_url,
+                  whatsapp_cloud_enabled, whatsapp_cloud_phone_number_id,
+                  whatsapp_cloud_waba_id, whatsapp_cloud_display_number,
                   CASE WHEN telegram_bot_token_secret IS NULL OR telegram_bot_token_secret = '' THEN false ELSE true END AS telegram_bot_token_configured,
                   CASE WHEN wc_consumer_key_secret IS NULL OR wc_consumer_key_secret = '' THEN false ELSE true END AS wc_consumer_key_configured,
                   CASE WHEN wc_consumer_secret_secret IS NULL OR wc_consumer_secret_secret = '' THEN false ELSE true END AS wc_consumer_secret_configured,
                   CASE WHEN meta_access_token_secret IS NULL OR meta_access_token_secret = '' THEN false ELSE true END AS meta_access_token_configured,
+                  CASE WHEN whatsapp_cloud_access_token_secret IS NULL OR whatsapp_cloud_access_token_secret = '' THEN false ELSE true END AS whatsapp_cloud_access_token_configured,
                   default_language, llm_routing_mode,
                   classifier_system_prompt, keyword_whitelist, keyword_blacklist, drafter_persona, updated_at
            FROM tenant_configs WHERE organization_id = $1`, [orgId]),
@@ -977,15 +991,21 @@ const channelHealth = (configured, runtimeStatus = null) => {
 
 export async function getTenantChannels(organizationId, { includeQr = false } = {}) {
   ensureSaaSMode('Tenant channels require DATABASE_URL SaaS mode.');
+  await ensureTenantChannelColumns();
   const orgId = Number(organizationId);
-  const [config, recent] = await Promise.all([
+  const [config, recent, runtimeRows] = await Promise.all([
     query(
       `SELECT t.wa_session_id,
               t.telegram_chat_id,
               t.wc_base_url,
               t.llm_routing_mode,
+              t.whatsapp_cloud_enabled,
+              t.whatsapp_cloud_phone_number_id,
+              t.whatsapp_cloud_waba_id,
+              t.whatsapp_cloud_display_number,
               CASE WHEN t.telegram_bot_token_secret IS NULL OR t.telegram_bot_token_secret = '' THEN false ELSE true END AS telegram_bot_token_configured,
               CASE WHEN t.meta_access_token_secret IS NULL OR t.meta_access_token_secret = '' THEN false ELSE true END AS meta_access_token_configured,
+              CASE WHEN t.whatsapp_cloud_access_token_secret IS NULL OR t.whatsapp_cloud_access_token_secret = '' THEN false ELSE true END AS whatsapp_cloud_access_token_configured,
               CASE WHEN t.wc_consumer_key_secret IS NULL OR t.wc_consumer_key_secret = '' THEN false ELSE true END AS wc_consumer_key_configured,
               CASE WHEN t.wc_consumer_secret_secret IS NULL OR t.wc_consumer_secret_secret = '' THEN false ELSE true END AS wc_consumer_secret_configured
          FROM tenant_configs t
@@ -1005,7 +1025,8 @@ export async function getTenantChannels(organizationId, { includeQr = false } = 
     ).catch((error) => {
       if (error?.code === '42P01') return { rows: [] };
       throw error;
-    })
+    }),
+    listChannelRuntime(orgId).catch(() => [])
   ]);
 
   if (config.rowCount === 0) {
@@ -1014,25 +1035,64 @@ export async function getTenantChannels(organizationId, { includeQr = false } = 
 
   const cfg = config.rows[0];
   const activityByPlatform = Object.fromEntries(recent.rows.map((row) => [row.source_platform, row]));
-  const whatsappRuntime = getWhatsAppSessionStatus(cfg.wa_session_id, { includeQr });
+  const runtimeByChannel = Object.fromEntries(runtimeRows.map((row) => [`${row.channel_type}:${row.channel_key}`, row]));
+  const persistedWhatsApp = runtimeByChannel[`whatsapp_web:${cfg.wa_session_id}`];
+  const memoryWhatsAppRuntime = getWhatsAppSessionStatus(cfg.wa_session_id, { includeQr });
+  const persistedWhatsAppRuntime = persistedWhatsApp ? {
+    ...(persistedWhatsApp.metadata || {}),
+    status: persistedWhatsApp.status,
+    worker_id: persistedWhatsApp.worker_id,
+    last_error: persistedWhatsApp.last_error,
+    updated_at: persistedWhatsApp.updated_at
+  } : null;
+  if (persistedWhatsAppRuntime?.qr_data_url && !(includeQr && persistedWhatsAppRuntime.status === 'qr_required')) {
+    delete persistedWhatsAppRuntime.qr_data_url;
+  }
+  const whatsappRuntime = persistedWhatsAppRuntime && (!memoryWhatsAppRuntime.updated_at || memoryWhatsAppRuntime.status === 'not_started')
+    ? persistedWhatsAppRuntime
+    : { ...(persistedWhatsAppRuntime || {}), ...memoryWhatsAppRuntime };
   const wooConfigured = Boolean(cfg.wc_base_url && cfg.wc_consumer_key_configured && cfg.wc_consumer_secret_configured);
   const telegramConfigured = Boolean(cfg.telegram_bot_token_configured && cfg.telegram_chat_id);
+  const whatsappCloudConfigured = Boolean(
+    Number(cfg.whatsapp_cloud_enabled || 0) &&
+    cfg.whatsapp_cloud_phone_number_id &&
+    cfg.whatsapp_cloud_access_token_configured
+  );
 
   return {
     channels: [
       {
         id: 'whatsapp',
-        name: 'WhatsApp listener',
+        name: 'WhatsApp group listener',
         type: 'inbound',
         status: channelHealth(Boolean(cfg.wa_session_id), whatsappRuntime.status),
         configured: Boolean(cfg.wa_session_id),
         details: [
           cfg.wa_session_id ? `Session: ${cfg.wa_session_id}` : 'Session missing',
+          whatsappRuntime.worker_id ? `Worker: ${whatsappRuntime.worker_id}` : null,
           whatsappRuntime.status === 'qr_required' ? 'QR scan required' : null,
           whatsappRuntime.should_reconnect === false ? 'Automatic reconnect stopped' : null
         ].filter(Boolean),
         runtime: whatsappRuntime,
         activity: activityByPlatform.whatsapp || null
+      },
+      {
+        id: 'whatsapp-cloud',
+        name: 'WhatsApp Business API',
+        type: 'inbound',
+        status: channelHealth(whatsappCloudConfigured, 'ready'),
+        configured: whatsappCloudConfigured,
+        details: [
+          Number(cfg.whatsapp_cloud_enabled || 0) ? 'Cloud API enabled' : 'Cloud API disabled',
+          cfg.whatsapp_cloud_phone_number_id ? `Phone number ID: ${cfg.whatsapp_cloud_phone_number_id}` : 'Phone number ID missing',
+          cfg.whatsapp_cloud_display_number ? `Display number: ${cfg.whatsapp_cloud_display_number}` : null,
+          cfg.whatsapp_cloud_access_token_configured ? 'Cloud access token configured' : 'Cloud access token missing',
+          process.env.WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN || process.env.META_WEBHOOK_VERIFY_TOKEN
+            ? 'Webhook verification token configured'
+            : 'Webhook verification token missing'
+        ].filter(Boolean),
+        webhook_path: '/webhooks/whatsapp-cloud',
+        activity: activityByPlatform.whatsapp_cloud || null
       },
       {
         id: 'meta',
@@ -1138,6 +1198,7 @@ export async function updateTenantConfig(organizationId, input) {
   if (!isSaaSMode()) {
     throw Object.assign(new Error('Tenant configuration requires DATABASE_URL SaaS mode.'), { statusCode: 400 });
   }
+  await ensureTenantChannelColumns();
 
   const waSessionId = String(input.wa_session_id || '').trim();
   const telegramChatId = String(input.telegram_chat_id || '').trim();
@@ -1160,13 +1221,21 @@ export async function updateTenantConfig(organizationId, input) {
             wc_consumer_secret_secret = COALESCE($12, wc_consumer_secret_secret),
             meta_access_token_secret = COALESCE($13, meta_access_token_secret),
             telegram_bot_token_secret = COALESCE($14, telegram_bot_token_secret),
+            whatsapp_cloud_enabled = $15,
+            whatsapp_cloud_phone_number_id = $16,
+            whatsapp_cloud_waba_id = $17,
+            whatsapp_cloud_display_number = $18,
+            whatsapp_cloud_access_token_secret = COALESCE($19, whatsapp_cloud_access_token_secret),
             updated_at = CURRENT_TIMESTAMP
       WHERE organization_id = $1
       RETURNING wa_session_id, telegram_chat_id, wc_base_url,
+                whatsapp_cloud_enabled, whatsapp_cloud_phone_number_id,
+                whatsapp_cloud_waba_id, whatsapp_cloud_display_number,
                 CASE WHEN telegram_bot_token_secret IS NULL OR telegram_bot_token_secret = '' THEN false ELSE true END AS telegram_bot_token_configured,
                 CASE WHEN wc_consumer_key_secret IS NULL OR wc_consumer_key_secret = '' THEN false ELSE true END AS wc_consumer_key_configured,
                 CASE WHEN wc_consumer_secret_secret IS NULL OR wc_consumer_secret_secret = '' THEN false ELSE true END AS wc_consumer_secret_configured,
                 CASE WHEN meta_access_token_secret IS NULL OR meta_access_token_secret = '' THEN false ELSE true END AS meta_access_token_configured,
+                CASE WHEN whatsapp_cloud_access_token_secret IS NULL OR whatsapp_cloud_access_token_secret = '' THEN false ELSE true END AS whatsapp_cloud_access_token_configured,
                 default_language, llm_routing_mode,
                 classifier_system_prompt, keyword_whitelist, keyword_blacklist, drafter_persona, updated_at`,
     [
@@ -1183,7 +1252,12 @@ export async function updateTenantConfig(organizationId, input) {
       input.wc_consumer_key_secret ? String(input.wc_consumer_key_secret).trim() : null,
       input.wc_consumer_secret_secret ? String(input.wc_consumer_secret_secret).trim() : null,
       input.meta_access_token_secret ? String(input.meta_access_token_secret).trim() : null,
-      input.telegram_bot_token_secret ? String(input.telegram_bot_token_secret).trim() : null
+      input.telegram_bot_token_secret ? String(input.telegram_bot_token_secret).trim() : null,
+      boolToInt(input.whatsapp_cloud_enabled),
+      input.whatsapp_cloud_phone_number_id ? String(input.whatsapp_cloud_phone_number_id).trim() : null,
+      input.whatsapp_cloud_waba_id ? String(input.whatsapp_cloud_waba_id).trim() : null,
+      input.whatsapp_cloud_display_number ? String(input.whatsapp_cloud_display_number).trim() : null,
+      input.whatsapp_cloud_access_token_secret ? String(input.whatsapp_cloud_access_token_secret).trim() : null
     ]
   );
 

@@ -149,6 +149,16 @@
                 <label>Telegram bot token<input name="telegram_bot_token_secret" required type="password"></label>
                 <label>Telegram chat ID<input name="telegram_chat_id" required></label>
                 <label class="wide">Meta access token<input name="meta_access_token_secret" type="password" placeholder="Facebook/Instagram page token"></label>
+                <label>WhatsApp Cloud API
+                  <select name="whatsapp_cloud_enabled">
+                    <option value="0">Disabled</option>
+                    <option value="1">Enabled</option>
+                  </select>
+                </label>
+                <label>Cloud phone number ID<input name="whatsapp_cloud_phone_number_id" placeholder="Meta phone number ID"></label>
+                <label>Cloud WABA ID<input name="whatsapp_cloud_waba_id" placeholder="WhatsApp Business Account ID"></label>
+                <label>Cloud display number<input name="whatsapp_cloud_display_number" placeholder="2547..."></label>
+                <label class="wide">Cloud access token<input name="whatsapp_cloud_access_token_secret" type="password" placeholder="WhatsApp Cloud API token"></label>
                 <label class="wide">WooCommerce URL<input name="wc_base_url" placeholder="https://example.com"></label>
                 <label>WooCommerce key<input name="wc_consumer_key_secret" type="password"></label>
                 <label>WooCommerce secret<input name="wc_consumer_secret_secret" type="password"></label>
@@ -252,6 +262,16 @@
                 <label>WooCommerce key<input name="wc_consumer_key_secret" type="password" placeholder="Leave blank to keep current key"></label>
                 <label>WooCommerce secret<input name="wc_consumer_secret_secret" type="password" placeholder="Leave blank to keep current secret"></label>
                 <label class="wide">Meta access token<input name="meta_access_token_secret" type="password" placeholder="Leave blank to keep current token"></label>
+                <label>WhatsApp Cloud API
+                  <select name="whatsapp_cloud_enabled">
+                    <option value="0">Disabled</option>
+                    <option value="1">Enabled</option>
+                  </select>
+                </label>
+                <label>Cloud phone number ID<input name="whatsapp_cloud_phone_number_id" placeholder="Meta phone number ID"></label>
+                <label>Cloud WABA ID<input name="whatsapp_cloud_waba_id" placeholder="WhatsApp Business Account ID"></label>
+                <label>Cloud display number<input name="whatsapp_cloud_display_number" placeholder="2547..."></label>
+                <label class="wide">Cloud access token<input name="whatsapp_cloud_access_token_secret" type="password" placeholder="Leave blank to keep current token"></label>
                 <label class="wide">Lead classification prompt<textarea name="classifier_system_prompt" rows="6"></textarea></label>
                 <label class="wide">Keyword whitelist<input name="keyword_whitelist" placeholder="quote, demo, booking, looking for, need"></label>
                 <label class="wide">Keyword blacklist<input name="keyword_blacklist" placeholder="job, vacancy, spam, unrelated"></label>

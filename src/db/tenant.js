@@ -1,9 +1,26 @@
 import { query } from './pg.js';
 
+let tenantChannelColumnsEnsured = false;
+
+export async function ensureTenantChannelColumns() {
+  if (tenantChannelColumnsEnsured || !process.env.DATABASE_URL) return;
+  await query(`
+    ALTER TABLE tenant_configs
+      ADD COLUMN IF NOT EXISTS whatsapp_cloud_enabled INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS whatsapp_cloud_phone_number_id TEXT,
+      ADD COLUMN IF NOT EXISTS whatsapp_cloud_waba_id TEXT,
+      ADD COLUMN IF NOT EXISTS whatsapp_cloud_display_number TEXT,
+      ADD COLUMN IF NOT EXISTS whatsapp_cloud_access_token_secret TEXT
+  `);
+  await query('CREATE INDEX IF NOT EXISTS idx_tenant_configs_whatsapp_cloud_phone ON tenant_configs(whatsapp_cloud_phone_number_id)');
+  tenantChannelColumnsEnsured = true;
+}
+
 /**
  * Loads all active tenants on startup.
  */
 export async function getActiveTenants() {
+  await ensureTenantChannelColumns();
   const result = await query(
     `SELECT t.*, o.name as organization_name,
             s.status AS subscription_status,
@@ -42,6 +59,7 @@ export async function getActiveTenants() {
  * Loads the configuration for a specific tenant based on their WhatsApp session ID.
  */
 export async function getTenantConfigBySessionId(waSessionId) {
+  await ensureTenantChannelColumns();
   const result = await query(
     `SELECT t.*, o.name as organization_name,
             s.status AS subscription_status,

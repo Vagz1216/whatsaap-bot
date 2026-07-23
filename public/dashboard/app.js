@@ -589,6 +589,11 @@ const renderTenant = () => {
     configForm.wc_consumer_key_secret.placeholder = config.wc_consumer_key_configured ? 'Configured - leave blank to keep current key' : 'Not configured';
     configForm.wc_consumer_secret_secret.placeholder = config.wc_consumer_secret_configured ? 'Configured - leave blank to keep current secret' : 'Not configured';
     configForm.meta_access_token_secret.placeholder = config.meta_access_token_configured ? 'Configured - leave blank to keep current token' : 'Not configured';
+    configForm.whatsapp_cloud_enabled.value = String(config.whatsapp_cloud_enabled || 0);
+    configForm.whatsapp_cloud_phone_number_id.value = config.whatsapp_cloud_phone_number_id || '';
+    configForm.whatsapp_cloud_waba_id.value = config.whatsapp_cloud_waba_id || '';
+    configForm.whatsapp_cloud_display_number.value = config.whatsapp_cloud_display_number || '';
+    configForm.whatsapp_cloud_access_token_secret.placeholder = config.whatsapp_cloud_access_token_configured ? 'Configured - leave blank to keep current token' : 'Not configured';
     configForm.classifier_system_prompt.value = config.classifier_system_prompt || '';
     configForm.keyword_whitelist.value = (config.keyword_whitelist || []).join(', ');
     configForm.keyword_blacklist.value = (config.keyword_blacklist || []).join(', ');
@@ -978,6 +983,7 @@ const submitConfig = async (event) => {
   if (!payload.wc_consumer_secret_secret) delete payload.wc_consumer_secret_secret;
   if (!payload.meta_access_token_secret) delete payload.meta_access_token_secret;
   if (!payload.telegram_bot_token_secret) delete payload.telegram_bot_token_secret;
+  if (!payload.whatsapp_cloud_access_token_secret) delete payload.whatsapp_cloud_access_token_secret;
   await api(`/api/tenants/${state.selectedTenantId}/config`, { method: 'PATCH', body: JSON.stringify(payload) });
   state.forms.configDirty = false;
   showToast('Configuration updated', 'success');

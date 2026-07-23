@@ -43,6 +43,13 @@ CREATE TABLE IF NOT EXISTS tenant_configs (
     -- Meta (Facebook/Instagram) destination
     meta_access_token_secret TEXT,
 
+    -- WhatsApp Cloud API (official Business API) destination
+    whatsapp_cloud_enabled INTEGER DEFAULT 0,
+    whatsapp_cloud_phone_number_id TEXT,
+    whatsapp_cloud_waba_id TEXT,
+    whatsapp_cloud_display_number TEXT,
+    whatsapp_cloud_access_token_secret TEXT,
+
     -- Inventory source (optional — only for accommodation tenants)
     wc_base_url TEXT,
     wc_consumer_key_secret TEXT,
@@ -292,6 +299,7 @@ INSERT INTO organizations (id, name, slug) VALUES (1, 'StayEZ', 'stayez') ON CON
 -- Let's define index for wa_session_id since we will query by it often
 CREATE INDEX IF NOT EXISTS idx_tenant_configs_wa_session_id ON tenant_configs(wa_session_id);
 CREATE INDEX IF NOT EXISTS idx_inbound_message_events_org_status ON inbound_message_events(organization_id, status);
+CREATE INDEX IF NOT EXISTS idx_tenant_configs_whatsapp_cloud_phone ON tenant_configs(whatsapp_cloud_phone_number_id);
 
 -- SaaS Performance Indices
 CREATE INDEX IF NOT EXISTS idx_app_users_clerk_user_id ON app_users(clerk_user_id);
@@ -313,4 +321,22 @@ CREATE INDEX IF NOT EXISTS idx_org_llm_credentials_org_status ON organization_ll
 
 -- Ensure meta_access_token_secret exists in case the table was created before
 ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS meta_access_token_secret TEXT;
+ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS whatsapp_cloud_enabled INTEGER DEFAULT 0;
+ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS whatsapp_cloud_phone_number_id TEXT;
+ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS whatsapp_cloud_waba_id TEXT;
+ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS whatsapp_cloud_display_number TEXT;
+ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS whatsapp_cloud_access_token_secret TEXT;
 
+CREATE TABLE IF NOT EXISTS channel_runtime_status (
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    channel_type TEXT NOT NULL,
+    channel_key TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    worker_id TEXT,
+    metadata TEXT,
+    last_error TEXT,
+    last_seen_at TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (organization_id, channel_type, channel_key)
+);
+CREATE INDEX IF NOT EXISTS idx_channel_runtime_org ON channel_runtime_status(organization_id, channel_type, updated_at);

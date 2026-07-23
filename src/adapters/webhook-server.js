@@ -3,6 +3,7 @@ import { URL } from 'url';
 import { extractMetaMessages, verifyMetaWebhook } from './meta.js';
 import { extractTikTokMessages, verifyTikTokWebhook } from './tiktok.js';
 import { extractTestMessages } from './test.js';
+import { extractWhatsAppCloudMessages, verifyWhatsAppCloudWebhook } from './whatsapp-cloud.js';
 import { handleDashboardRoute } from '../ui/dashboard-routes.js';
 import pino from 'pino';
 
@@ -55,6 +56,11 @@ const routeConfig = {
     name: 'test',
     verify: () => ({ ok: true, challenge: 'ok' }),
     extract: extractTestMessages
+  },
+  '/webhooks/whatsapp-cloud': {
+    name: 'whatsapp_cloud',
+    verify: verifyWhatsAppCloudWebhook,
+    extract: extractWhatsAppCloudMessages
   }
 };
 
@@ -104,17 +110,20 @@ export const startWebhookServer = ({ dispatchMessage, resolveTenant }) => {
 
     try {
       const payload = await readJsonBody(req);
+      const extractedMessages = route.extract(payload);
+      const tenantKeyFromMessage = extractedMessages.find((message) => message.metadata?.phone_number_id)?.metadata?.phone_number_id;
       const tenant = resolveTenant({
         tenantKey: url.searchParams.get('tenant') || payload.tenant || payload.wa_session_id,
-        organizationId: url.searchParams.get('organization_id') || payload.organization_id
+        organizationId: url.searchParams.get('organization_id') || payload.organization_id,
+        channelKey: tenantKeyFromMessage || null
       });
-      const messages = route.extract(payload).map((message) => ({
+      const messages = extractedMessages.map((message) => ({
         ...message,
         organization_id: tenant?.organization_id || message.organization_id || null,
         metadata: {
           ...(message.metadata || {}),
           webhook_adapter: route.name,
-          webhook_tenant_key: url.searchParams.get('tenant') || payload.tenant || null
+          webhook_tenant_key: url.searchParams.get('tenant') || payload.tenant || tenantKeyFromMessage || null
         }
       }));
 

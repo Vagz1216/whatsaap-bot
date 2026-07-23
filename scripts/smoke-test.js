@@ -5,6 +5,7 @@ import { validateDraftMessage, validateInboundMessage, GuardrailError } from '..
 import { normalizeInboundMessage } from '../src/schema/inbound-message.js';
 import { extractMetaMessages } from '../src/adapters/meta.js';
 import { extractTikTokMessages } from '../src/adapters/tiktok.js';
+import { extractWhatsAppCloudMessages } from '../src/adapters/whatsapp-cloud.js';
 import { hasTenantWooCommerceConfig } from '../src/stayez/api.js';
 
 const requiredFiles = [
@@ -20,6 +21,9 @@ const requiredFiles = [
   'src/adapters/webhook-server.js',
   'src/adapters/meta.js',
   'src/adapters/tiktok.js',
+  'src/adapters/whatsapp-cloud.js',
+  'src/agents/whatsapp-cloud-sender.js',
+  'src/db/channel-runtime.js',
   'src/adapters/test.js',
   'src/ui/dashboard-auth.js',
   'src/ui/dashboard-routes.js',
@@ -104,6 +108,40 @@ const tiktokMessages = extractTikTokMessages({
 
 if (tiktokMessages.length !== 1 || tiktokMessages[0].source_platform !== 'tiktok') {
   throw new Error('TikTok adapter failed to extract message.');
+}
+
+const whatsappCloudMessages = extractWhatsAppCloudMessages({
+  object: 'whatsapp_business_account',
+  entry: [{
+    id: 'waba-1',
+    changes: [{
+      value: {
+        metadata: {
+          phone_number_id: 'phone-number-1',
+          display_phone_number: '254700000000'
+        },
+        contacts: [{
+          wa_id: '254711111111',
+          profile: { name: 'Mary Lead' }
+        }],
+        messages: [{
+          id: 'wamid-1',
+          from: '254711111111',
+          timestamp: String(Math.floor(Date.now() / 1000)),
+          type: 'text',
+          text: { body: 'Need accommodation in Kilimani tonight' }
+        }]
+      }
+    }]
+  }]
+});
+
+if (
+  whatsappCloudMessages.length !== 1 ||
+  whatsappCloudMessages[0].source_platform !== 'whatsapp_cloud' ||
+  whatsappCloudMessages[0].metadata.phone_number_id !== 'phone-number-1'
+) {
+  throw new Error('WhatsApp Cloud adapter failed to extract message.');
 }
 
 try {

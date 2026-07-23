@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import qrcode from 'qrcode-terminal';
+import { upsertChannelRuntime } from '../db/channel-runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,17 +16,49 @@ const dataDir = path.resolve(process.env.DATA_DIR || path.join(__dirname, '../..
 const logger = pino({ level: 'silent' });
 const groupNameCache = new Map();
 const whatsappSessionStatus = new Map();
+const workerId = process.env.WHATSAPP_WORKER_ID || process.env.HOSTNAME || 'default-worker';
+
+const whatsappBrowserIdentity = () => [
+  process.env.WHATSAPP_BROWSER_NAME || 'Scout Ops',
+  process.env.WHATSAPP_BROWSER_PLATFORM || 'Chrome',
+  process.env.WHATSAPP_BROWSER_VERSION || '124.0.0'
+];
 
 const setWhatsAppSessionStatus = (sessionId, patch) => {
   if (!sessionId) return;
   const previous = whatsappSessionStatus.get(sessionId) || {};
-  whatsappSessionStatus.set(sessionId, {
+  const next = {
     session_id: sessionId,
     status: 'starting',
+    worker_id: workerId,
     ...previous,
     ...patch,
     updated_at: new Date().toISOString()
-  });
+  };
+  whatsappSessionStatus.set(sessionId, next);
+
+  if (next.organization_id) {
+    upsertChannelRuntime({
+      organizationId: next.organization_id,
+      channelType: 'whatsapp_web',
+      channelKey: sessionId,
+      status: next.status,
+      workerId: next.worker_id,
+      lastError: next.last_error || null,
+      metadata: {
+        session_id: sessionId,
+        tenant: next.tenant || null,
+        last_qr_at: next.last_qr_at || null,
+        qr_data_url: next.qr_data_url || null,
+        connected_at: next.connected_at || null,
+        last_message_at: next.last_message_at || null,
+        should_reconnect: next.should_reconnect ?? null,
+        last_disconnect_code: next.last_disconnect_code || null
+      }
+    }).catch((error) => {
+      console.error(`[Tenant: ${next.tenant || sessionId}] Could not persist WhatsApp runtime status:`, error.message);
+    });
+  }
 };
 
 const qrToSvgDataUrl = (input) => {
@@ -104,7 +137,7 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
     auth: state,
     printQRInTerminal: false,
     logger,
-    browser: ['Ubuntu', 'Chrome', '20.0.04']
+    browser: whatsappBrowserIdentity()
   });
 
   sock.ev.on('connection.update', (update) => {
