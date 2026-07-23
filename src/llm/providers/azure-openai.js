@@ -33,5 +33,14 @@ export const callAzureOpenAI = async (prompt, systemPrompt, isJson = false, mode
     temperature: 0.3,
   });
 
-  return response.choices[0].message.content;
+  const text = response.choices[0].message.content;
+  if (credential.__return_metadata) {
+    return {
+      text,
+      model: resolved.deployment,
+      usage: response.usage || null,
+      raw: response
+    };
+  }
+  return text;
 };

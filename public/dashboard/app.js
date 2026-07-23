@@ -7,6 +7,7 @@ const state = {
   credentials: [],
   llmPolicy: null,
   channels: [],
+  usageLedger: { llm_events: [], ai_actions: [] },
   events: [],
   organizations: [],
   actor: null,
@@ -446,7 +447,7 @@ const canAccessView = (view) => ({
   leads: can('can_review_leads'),
   settings: can('can_manage_config'),
   plans: can('can_manage_subscription_plans') || can('can_choose_subscription_plan'),
-  usage: can('can_view_tenant'),
+  usage: can('can_view_compliance'),
   organization: can('can_manage_organization') || can('can_manage_users') || can('can_create_organizations'),
   llm: can('can_manage_llm_credentials'),
   compliance: can('can_view_compliance')
@@ -676,6 +677,7 @@ const renderUsage = () => {
 
 const renderUsageDetail = () => {
   const usage = state.tenant?.usage || {};
+  const ledger = state.usageLedger || { llm_events: [], ai_actions: [] };
   $('#usageMetrics').innerHTML = [
     metricCard('AI credits', fmt.format(usage.ai_credits || 0), 'Metered customer-facing actions'),
     metricCard('LLM cost', money.format(Number(usage.llm_cost_usd || 0)), 'Estimated provider spend'),
@@ -688,6 +690,32 @@ const renderUsageDetail = () => {
     <div class="usage-row"><strong>Fallback count</strong><span>${fmt.format(usage.fallback_count || 0)}</span></div>
     <div class="usage-row"><strong>Active plan</strong><span>${safeText(selectedOrganization()?.subscription?.plan?.name)}</span></div>
   `;
+  const llmTable = $('#llmUsageTable');
+  if (llmTable) {
+    llmTable.innerHTML = (ledger.llm_events || []).map((event) => `
+      <tr>
+        <td>${safeText(event.created_at)}</td>
+        <td>${safeText(event.agent_name)}</td>
+        <td>${safeText(event.provider)}<br><small>${safeText(event.billing_source)}</small></td>
+        <td>${safeText(event.model)}</td>
+        <td>${fmt.format(event.total_tokens || 0)}</td>
+        <td>${money.format(Number(event.estimated_cost_usd || 0))}<br><small>${safeText(event.pricing_source)}</small></td>
+        <td>${status(event.status)}${event.fallback_triggered ? '<br><small>Fallback</small>' : ''}${event.error ? `<br><small>${safeText(event.error)}</small>` : ''}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="7">No model usage recorded yet.</td></tr>';
+  }
+  const aiTable = $('#aiUsageTable');
+  if (aiTable) {
+    aiTable.innerHTML = (ledger.ai_actions || []).map((event) => `
+      <tr>
+        <td>${safeText(event.created_at)}</td>
+        <td>${safeText(event.action_type)}</td>
+        <td>${fmt.format(event.credits_used || 0)}</td>
+        <td>${safeText(event.source_object_type)} ${safeText(event.source_object_id)}</td>
+        <td>${status(event.status)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="5">No AI actions recorded yet.</td></tr>';
+  }
 };
 
 const renderPlans = () => {
@@ -906,6 +934,12 @@ const loadManagementData = async () => {
   } else {
     state.credentials = [];
     state.llmPolicy = null;
+  }
+
+  if (canAccessView('usage') && Number(orgId) > 0) {
+    state.usageLedger = await api(`/api/tenants/${orgId}/usage-ledger?limit=50`);
+  } else {
+    state.usageLedger = { llm_events: [], ai_actions: [] };
   }
 
   if (canAccessView('compliance')) {

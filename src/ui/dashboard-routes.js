@@ -8,6 +8,7 @@ import {
   createSubscriptionPlan,
   getAdminOverview,
   getOrganizationSubscription,
+  listUsageLedger,
   getTenantChannels,
   getTenantDashboard,
   listComplianceEvents,
@@ -312,6 +313,14 @@ const handleApi = async (req, res, url) => {
       const membership = await requireOrganizationRole(actor, orgId, READ_ROLES);
       const includeQr = Boolean(membership.system_owner || ADMIN_ROLES.has(membership.role));
       sendJson(res, 200, await getTenantChannels(orgId, { includeQr }));
+      return true;
+    }
+
+    const tenantUsageMatch = pathname.match(/^\/api\/tenants\/(\d+)\/usage-ledger$/);
+    if (req.method === 'GET' && tenantUsageMatch) {
+      const orgId = Number(tenantUsageMatch[1]);
+      await requireOrganizationRole(actor, orgId, MANAGER_ROLES);
+      sendJson(res, 200, await listUsageLedger(orgId, { limit: url.searchParams.get('limit') }));
       return true;
     }
 

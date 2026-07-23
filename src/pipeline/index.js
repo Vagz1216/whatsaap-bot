@@ -6,6 +6,7 @@ import { sendCards } from '../telegram/index.js';
 import { hasTenantWooCommerceConfig } from '../stayez/api.js';
 import db from '../db/index.js';
 import { query } from '../db/pg.js';
+import { recordAiUsage, recordPlatformUsage } from '../db/tenant.js';
 import { claimInboundMessage, markInboundMessageStatus } from '../db/listener-state.js';
 import { validateInboundMessage, GuardrailError } from '../guardrails/index.js';
 import { normalizeInboundMessage } from '../schema/inbound-message.js';
@@ -156,6 +157,14 @@ const isLikelyLeadRequest = (text) => {
 export const processMessage = async (msgData, tenantConfig = null) => {
   const requestId = randomUUID();
   const isSaaS = tenantConfig !== null;
+  const auditTenantConfig = isSaaS ? {
+    ...tenantConfig,
+    __audit: {
+      requestId,
+      sourceObjectType: 'inbound_message',
+      sourceObjectId: msgData.external_message_id || msgData.message_id || null
+    }
+  } : tenantConfig;
   const logPrefix = isSaaS ? `[Tenant: ${tenantConfig.organization_name}]` : '[Local StayEZ]';
   let safeMsgData = null;
   const metrics = { t_start: Date.now() };
@@ -163,6 +172,22 @@ export const processMessage = async (msgData, tenantConfig = null) => {
   try {
     const normalizedMsgData = normalizeInboundMessage(msgData, tenantConfig);
     safeMsgData = normalizedMsgData;
+    if (isSaaS) {
+      await recordPlatformUsage(
+        tenantConfig.organization_id,
+        'inbound_message_received',
+        1,
+        null,
+        'inbound_message',
+        normalizedMsgData.external_message_id || normalizedMsgData.message_id || null,
+        {
+          request_id: requestId,
+          source_platform: normalizedMsgData.source_platform,
+          source_channel: normalizedMsgData.source_channel,
+          source_id: normalizedMsgData.source_id
+        }
+      ).catch((error) => logger.warn({ kind: 'platform_usage_record_failed', error: error.message }, 'Could not record inbound message usage'));
+    }
     logger.info(
       {
         request_id: requestId,
@@ -224,7 +249,7 @@ export const processMessage = async (msgData, tenantConfig = null) => {
 
     // 1. Classify
     metrics.t_classify_start = Date.now();
-    const classification = await runClassifier(safeMsgData.raw_message, tenantConfig || {}, safeMsgData);
+    const classification = await runClassifier(safeMsgData.raw_message, auditTenantConfig || {}, safeMsgData);
     metrics.t_classify_end = Date.now();
     if (!classification) {
       logger.debug({ request_id: requestId, kind: 'message_ignored', reason: 'classification' }, `${logPrefix} Message ignored by classifier`);
@@ -241,6 +266,17 @@ export const processMessage = async (msgData, tenantConfig = null) => {
 
     if (isSaaS) {
       leadId = await insertSaasLead(safeMsgData, classification, tenantConfig);
+      auditTenantConfig.__audit.sourceObjectType = 'lead';
+      auditTenantConfig.__audit.sourceObjectId = leadId;
+      await recordAiUsage(
+        tenantConfig.organization_id,
+        'lead_classified',
+        1,
+        null,
+        'lead',
+        leadId,
+        'success'
+      ).catch((error) => logger.warn({ kind: 'ai_usage_record_failed', action: 'lead_classified', error: error.message }, 'Could not record AI action usage'));
     } else {
       leadId = insertLocalLead(safeMsgData, classification);
     }
@@ -262,14 +298,30 @@ export const processMessage = async (msgData, tenantConfig = null) => {
     
     if (lead.missing_critical_details && lead.missing_critical_details.length > 0) {
       logger.info({ request_id: requestId, kind: 'matcher_skipped', missing_details: lead.missing_critical_details }, `${logPrefix} Lead missing details`);
-      drafts = await runDrafter(lead, null, tenantConfig || {}); 
+      drafts = await runDrafter(lead, null, auditTenantConfig || {});
     } else if (hasInventoryApi) {
       matchResult = await runMatcher(extracted_data, tenantConfig || {});
       logger.info({ request_id: requestId, kind: 'matcher_complete', match_type: matchResult.matchType }, `${logPrefix} Match result`);
-      drafts = await runDrafter(lead, matchResult, tenantConfig || {});
+      drafts = await runDrafter(lead, matchResult, auditTenantConfig || {});
     } else {
       logger.info({ request_id: requestId, kind: 'matcher_skipped', reason: 'no_inventory_api' }, `${logPrefix} Matcher skipped (no inventory API)`);
-      drafts = await runDrafter(lead, { matchType: 'no_api', properties: [] }, tenantConfig || {});
+      drafts = await runDrafter(lead, { matchType: 'no_api', properties: [] }, auditTenantConfig || {});
+    }
+    if (isSaaS) {
+      const draftCount = [
+        drafts.draft_to_client,
+        drafts.draft_to_matched_host,
+        ...(drafts.drafts_to_nearby_hosts || [])
+      ].filter(Boolean).length;
+      await recordAiUsage(
+        tenantConfig.organization_id,
+        'drafts_generated',
+        Math.max(1, draftCount),
+        null,
+        'lead',
+        leadId,
+        'success'
+      ).catch((error) => logger.warn({ kind: 'ai_usage_record_failed', action: 'drafts_generated', error: error.message }, 'Could not record AI action usage'));
     }
     metrics.t_match_draft_end = Date.now();
 

@@ -18,5 +18,14 @@ export const callGroq = async (prompt, systemPrompt, isJson = false, model = 'll
     temperature: 0.3,
   });
 
-  return response.choices[0]?.message?.content;
+  const text = response.choices[0]?.message?.content;
+  if (credential.__return_metadata) {
+    return {
+      text,
+      model: credential.default_model || model,
+      usage: response.usage || null,
+      raw: response
+    };
+  }
+  return text;
 };

@@ -15,7 +15,7 @@ import { callOpenRouter } from '../llm/providers/openrouter.js';
 import { decryptSecret, encryptSecret } from '../utils/secrets.js';
 import { getWhatsAppSessionStatus } from '../agents/monitor.js';
 import { listChannelRuntime } from '../db/channel-runtime.js';
-import { ensureTenantChannelColumns } from '../db/tenant.js';
+import { ensureTenantChannelColumns, ensureUsageAuditColumns } from '../db/tenant.js';
 
 const isSaaSMode = () => !!process.env.DATABASE_URL;
 const DEFAULT_CLASSIFIER_SYSTEM_PROMPT = 'Classify inbound messages for this tenant. Treat a message as a lead only when it shows real buying, booking, inquiry, support, or service intent for this tenant business. Return valid JSON using the required schema.';
@@ -287,18 +287,22 @@ export async function getAdminOverview() {
                   COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_leads
            FROM leads`),
     query('SELECT COUNT(*)::int AS total_contacts FROM contacts'),
-    query(`SELECT
-             COALESCE(SUM(a.credits_used), 0)::int AS ai_credits,
-             COALESCE(SUM(l.estimated_cost_usd), 0)::float AS llm_cost_usd,
-             COALESCE(SUM(l.total_tokens), 0)::int AS llm_tokens,
-             COALESCE(SUM(l.request_count), 0)::int AS requests,
-             COALESCE(AVG(NULLIF(l.latency_ms, 0)), 0)::float AS avg_latency_ms,
-             COALESCE(SUM(l.fallback_triggered), 0)::int AS fallback_count
-           FROM llm_usage_events l
-           FULL OUTER JOIN ai_usage_actions a
-             ON a.organization_id = l.organization_id
-            AND a.created_at::date = l.created_at::date
-           WHERE COALESCE(l.created_at, a.created_at) >= NOW() - INTERVAL '30 days'`),
+    query(`WITH llm AS (
+             SELECT COALESCE(SUM(estimated_cost_usd), 0)::float AS llm_cost_usd,
+                    COALESCE(SUM(total_tokens), 0)::int AS llm_tokens,
+                    COALESCE(SUM(request_count), 0)::int AS requests,
+                    COALESCE(AVG(NULLIF(latency_ms, 0)), 0)::float AS avg_latency_ms,
+                    COALESCE(SUM(fallback_triggered), 0)::int AS fallback_count
+               FROM llm_usage_events
+              WHERE created_at >= NOW() - INTERVAL '30 days'
+           ), actions AS (
+             SELECT COALESCE(SUM(credits_used), 0)::int AS ai_credits
+               FROM ai_usage_actions
+              WHERE created_at >= NOW() - INTERVAL '30 days'
+           )
+           SELECT actions.ai_credits, llm.llm_cost_usd, llm.llm_tokens, llm.requests,
+                  llm.avg_latency_ms, llm.fallback_count
+             FROM llm CROSS JOIN actions`),
     query(`SELECT l.*, o.name AS organization_name
            FROM leads l
            JOIN organizations o ON o.id = l.organization_id
@@ -905,6 +909,41 @@ export async function listComplianceEvents(input = {}) {
   }));
 }
 
+export async function listUsageLedger(organizationId, input = {}) {
+  ensureSaaSMode('Usage ledger requires DATABASE_URL SaaS mode.');
+  await ensureUsageAuditColumns();
+  const orgId = Number(organizationId);
+  const limit = Math.max(1, Math.min(Number(input.limit || 100), 500));
+  const [llm, actions] = await Promise.all([
+    query(
+      `SELECT id, request_id, agent_name, provider, model, input_tokens, output_tokens,
+              cached_input_tokens, reasoning_output_tokens, total_tokens, request_count,
+              latency_ms, estimated_cost_usd, pricing_source, pricing_version, routing_mode,
+              billing_source, provider_credential_id, fallback_triggered, attempt_count,
+              status, error, source_object_type, source_object_id, metadata, created_at
+         FROM llm_usage_events
+        WHERE organization_id = $1
+        ORDER BY id DESC
+        LIMIT $2`,
+      [orgId, limit]
+    ),
+    query(
+      `SELECT id, request_id, action_type, quantity, credits_used, billing_period_start,
+              billing_period_end, source_object_type, source_object_id, status, metadata, created_at
+         FROM ai_usage_actions
+        WHERE organization_id = $1
+        ORDER BY id DESC
+        LIMIT $2`,
+      [orgId, limit]
+    )
+  ]);
+
+  return {
+    llm_events: llm.rows.map((row) => ({ ...row, metadata: parseJson(row.metadata, {}) })),
+    ai_actions: actions.rows.map((row) => ({ ...row, metadata: parseJson(row.metadata, {}) }))
+  };
+}
+
 export async function getTenantDashboard(organizationId) {
   const orgId = Number(organizationId || 0);
 
@@ -945,18 +984,24 @@ export async function getTenantDashboard(organizationId) {
                   COUNT(*) FILTER (WHERE status IN ('ready','delivered'))::int AS ready_leads,
                   COUNT(*) FILTER (WHERE contactability_status <> 'direct_contact_available')::int AS manual_required
            FROM leads WHERE organization_id = $1`, [orgId]),
-    query(`SELECT COALESCE(SUM(a.credits_used), 0)::int AS ai_credits,
-                  COALESCE(SUM(l.estimated_cost_usd), 0)::float AS llm_cost_usd,
-                  COALESCE(SUM(l.total_tokens), 0)::int AS llm_tokens,
-                  COALESCE(SUM(l.request_count), 0)::int AS requests,
-                  COALESCE(AVG(NULLIF(l.latency_ms, 0)), 0)::float AS avg_latency_ms,
-                  COALESCE(SUM(l.fallback_triggered), 0)::int AS fallback_count
-           FROM llm_usage_events l
-           FULL OUTER JOIN ai_usage_actions a
-             ON a.organization_id = l.organization_id
-            AND a.created_at::date = l.created_at::date
-           WHERE COALESCE(l.organization_id, a.organization_id) = $1
-             AND COALESCE(l.created_at, a.created_at) >= NOW() - INTERVAL '30 days'`, [orgId]),
+    query(`WITH llm AS (
+             SELECT COALESCE(SUM(estimated_cost_usd), 0)::float AS llm_cost_usd,
+                    COALESCE(SUM(total_tokens), 0)::int AS llm_tokens,
+                    COALESCE(SUM(request_count), 0)::int AS requests,
+                    COALESCE(AVG(NULLIF(latency_ms, 0)), 0)::float AS avg_latency_ms,
+                    COALESCE(SUM(fallback_triggered), 0)::int AS fallback_count
+               FROM llm_usage_events
+              WHERE organization_id = $1
+                AND created_at >= NOW() - INTERVAL '30 days'
+           ), actions AS (
+             SELECT COALESCE(SUM(credits_used), 0)::int AS ai_credits
+               FROM ai_usage_actions
+              WHERE organization_id = $1
+                AND created_at >= NOW() - INTERVAL '30 days'
+           )
+           SELECT actions.ai_credits, llm.llm_cost_usd, llm.llm_tokens, llm.requests,
+                  llm.avg_latency_ms, llm.fallback_count
+             FROM llm CROSS JOIN actions`, [orgId]),
     query('SELECT * FROM leads WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 50', [orgId]),
     query('SELECT id, name, whatsapp_number, region, sub_area, tags, notes, source, created_at FROM contacts WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 50', [orgId])
   ]);

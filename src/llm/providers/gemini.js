@@ -15,5 +15,14 @@ export const callGemini = async (prompt, systemPrompt, isJson = false, modelName
   });
 
   const result = await model.generateContent(prompt);
-  return result.response.text();
+  const text = result.response.text();
+  if (credential.__return_metadata) {
+    return {
+      text,
+      model: credential.default_model || modelName,
+      usage: result.response.usageMetadata || null,
+      raw: result.response
+    };
+  }
+  return text;
 };

@@ -278,6 +278,8 @@ CREATE TABLE IF NOT EXISTS llm_usage_events (
     pricing_source TEXT,
     pricing_version TEXT,
     routing_mode TEXT,
+    billing_period_start TIMESTAMP,
+    billing_period_end TIMESTAMP,
     billing_source TEXT NOT NULL DEFAULT 'platform' CHECK(billing_source IN ('platform','organization')),
     provider_credential_id INTEGER REFERENCES organization_llm_credentials(id) ON DELETE SET NULL,
     fallback_triggered INTEGER NOT NULL DEFAULT 0 CHECK(fallback_triggered IN (0,1)),
@@ -285,6 +287,9 @@ CREATE TABLE IF NOT EXISTS llm_usage_events (
     tool_call_count INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'success' CHECK(status IN ('success','error')),
     error TEXT,
+    source_object_type TEXT,
+    source_object_id TEXT,
+    metadata TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -318,6 +323,14 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_user ON ai_usage_actions(user_id, create
 CREATE INDEX IF NOT EXISTS idx_platform_usage_org_created ON platform_usage_events(organization_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_platform_cost_period ON platform_cost_allocations(period_start, period_end);
 CREATE INDEX IF NOT EXISTS idx_org_llm_credentials_org_status ON organization_llm_credentials(organization_id, status);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_org_created ON llm_usage_events(organization_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_billing_period ON llm_usage_events(organization_id, billing_period_start, billing_period_end);
+
+ALTER TABLE llm_usage_events ADD COLUMN IF NOT EXISTS billing_period_start TIMESTAMP;
+ALTER TABLE llm_usage_events ADD COLUMN IF NOT EXISTS billing_period_end TIMESTAMP;
+ALTER TABLE llm_usage_events ADD COLUMN IF NOT EXISTS source_object_type TEXT;
+ALTER TABLE llm_usage_events ADD COLUMN IF NOT EXISTS source_object_id TEXT;
+ALTER TABLE llm_usage_events ADD COLUMN IF NOT EXISTS metadata TEXT;
 
 -- Ensure meta_access_token_secret exists in case the table was created before
 ALTER TABLE tenant_configs ADD COLUMN IF NOT EXISTS meta_access_token_secret TEXT;

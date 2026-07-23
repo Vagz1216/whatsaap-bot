@@ -361,6 +361,52 @@
             </div>
             <div class="usage-panel" id="usageDetailPanel"></div>
           </section>
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Model attempts</h2>
+                <p>Provider, model, token, cost, fallback, and error records.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Agent</th>
+                    <th>Provider</th>
+                    <th>Model</th>
+                    <th>Tokens</th>
+                    <th>Cost</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="llmUsageTable"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>AI actions</h2>
+                <p>Credit events tied to leads and workflow actions.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Credits</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="aiUsageTable"></tbody>
+              </table>
+            </div>
+          </section>
         </section>
 
         <section class="view" id="organizationView">

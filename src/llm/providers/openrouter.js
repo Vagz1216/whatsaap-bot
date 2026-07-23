@@ -29,5 +29,14 @@ export const callOpenRouter = async (prompt, systemPrompt, isJson = false, model
   }
 
   const data = await response.json();
-  return data.choices[0]?.message?.content;
+  const text = data.choices[0]?.message?.content;
+  if (credential.__return_metadata) {
+    return {
+      text,
+      model: credential.default_model || model,
+      usage: data.usage || null,
+      raw: data
+    };
+  }
+  return text;
 };
