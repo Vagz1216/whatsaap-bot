@@ -975,7 +975,7 @@ const channelHealth = (configured, runtimeStatus = null) => {
   return 'configured';
 };
 
-export async function getTenantChannels(organizationId) {
+export async function getTenantChannels(organizationId, { includeQr = false } = {}) {
   ensureSaaSMode('Tenant channels require DATABASE_URL SaaS mode.');
   const orgId = Number(organizationId);
   const [config, recent] = await Promise.all([
@@ -1014,7 +1014,7 @@ export async function getTenantChannels(organizationId) {
 
   const cfg = config.rows[0];
   const activityByPlatform = Object.fromEntries(recent.rows.map((row) => [row.source_platform, row]));
-  const whatsappRuntime = getWhatsAppSessionStatus(cfg.wa_session_id);
+  const whatsappRuntime = getWhatsAppSessionStatus(cfg.wa_session_id, { includeQr });
   const wooConfigured = Boolean(cfg.wc_base_url && cfg.wc_consumer_key_configured && cfg.wc_consumer_secret_configured);
   const telegramConfigured = Boolean(cfg.telegram_bot_token_configured && cfg.telegram_chat_id);
 
@@ -1028,7 +1028,7 @@ export async function getTenantChannels(organizationId) {
         configured: Boolean(cfg.wa_session_id),
         details: [
           cfg.wa_session_id ? `Session: ${cfg.wa_session_id}` : 'Session missing',
-          whatsappRuntime.status === 'qr_required' ? 'QR scan required from server logs' : null,
+          whatsappRuntime.status === 'qr_required' ? 'QR scan required' : null,
           whatsappRuntime.should_reconnect === false ? 'Automatic reconnect stopped' : null
         ].filter(Boolean),
         runtime: whatsappRuntime,

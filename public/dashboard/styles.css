@@ -609,6 +609,26 @@ label {
   line-height: 1.35;
 }
 
+.qr-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  padding: 12px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.qr-panel img {
+  width: min(240px, 100%);
+  height: auto;
+  border-radius: 6px;
+  background: #fff;
+}
+
 .bar {
   height: 10px;
   border-radius: 999px;

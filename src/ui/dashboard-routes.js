@@ -309,8 +309,9 @@ const handleApi = async (req, res, url) => {
     const tenantChannelsMatch = pathname.match(/^\/api\/tenants\/(\d+)\/channels$/);
     if (req.method === 'GET' && tenantChannelsMatch) {
       const orgId = Number(tenantChannelsMatch[1]);
-      await requireOrganizationRole(actor, orgId, READ_ROLES);
-      sendJson(res, 200, await getTenantChannels(orgId));
+      const membership = await requireOrganizationRole(actor, orgId, READ_ROLES);
+      const includeQr = Boolean(membership.system_owner || ADMIN_ROLES.has(membership.role));
+      sendJson(res, 200, await getTenantChannels(orgId, { includeQr }));
       return true;
     }
 

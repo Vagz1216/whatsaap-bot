@@ -608,6 +608,12 @@ const renderChannels = () => {
   grid.innerHTML = channels.map((channel) => {
     const activity = channel.activity || {};
     const runtime = channel.runtime || {};
+    const qrPanel = runtime.qr_data_url ? `
+      <div class="qr-panel">
+        <img src="${runtime.qr_data_url}" alt="WhatsApp sign-in QR code">
+        <span>Scan from WhatsApp Linked devices. Refresh after scanning.</span>
+      </div>
+    ` : '';
     const detailRows = [
       ...(channel.details || []),
       channel.webhook_path ? `Path: ${channel.webhook_path}` : null,
@@ -626,6 +632,7 @@ const renderChannels = () => {
           </div>
           ${status(channel.status)}
         </div>
+        ${qrPanel}
         <div class="channel-details">
           ${detailRows.map((item) => `<span>${safeText(item)}</span>`).join('') || '<span>No details available.</span>'}
         </div>

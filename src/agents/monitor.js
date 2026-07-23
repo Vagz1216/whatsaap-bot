@@ -2,10 +2,14 @@ import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeys
 import pino from 'pino';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import qrcode from 'qrcode-terminal';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+const QRCode = require('qrcode-terminal/vendor/QRCode');
+const QRErrorCorrectLevel = require('qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel');
 const dataDir = path.resolve(process.env.DATA_DIR || path.join(__dirname, '../../data'));
 
 const logger = pino({ level: 'silent' });
@@ -24,13 +28,39 @@ const setWhatsAppSessionStatus = (sessionId, patch) => {
   });
 };
 
-export const getWhatsAppSessionStatus = (sessionId) => {
+const qrToSvgDataUrl = (input) => {
+  const qr = new QRCode(-1, QRErrorCorrectLevel.L);
+  qr.addData(input);
+  qr.make();
+
+  const moduleCount = qr.getModuleCount();
+  const quietZone = 4;
+  const cellSize = 8;
+  const size = (moduleCount + quietZone * 2) * cellSize;
+  const rects = [];
+
+  for (let row = 0; row < moduleCount; row += 1) {
+    for (let col = 0; col < moduleCount; col += 1) {
+      if (qr.isDark(row, col)) {
+        rects.push(`<rect x="${(col + quietZone) * cellSize}" y="${(row + quietZone) * cellSize}" width="${cellSize}" height="${cellSize}"/>`);
+      }
+    }
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><rect width="100%" height="100%" fill="#fff"/><g fill="#111820">${rects.join('')}</g></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+};
+
+export const getWhatsAppSessionStatus = (sessionId, { includeQr = false } = {}) => {
   const status = whatsappSessionStatus.get(sessionId) || {
     session_id: sessionId || null,
     status: sessionId ? 'not_started' : 'not_configured',
     updated_at: null
   };
-  const { auth_path, ...publicStatus } = status;
+  const { auth_path, qr_data_url, ...publicStatus } = status;
+  if (includeQr && status.status === 'qr_required' && qr_data_url) {
+    publicStatus.qr_data_url = qr_data_url;
+  }
   return publicStatus;
 };
 
@@ -84,6 +114,7 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
       setWhatsAppSessionStatus(sessionId, {
         status: 'qr_required',
         last_qr_at: new Date().toISOString(),
+        qr_data_url: qrToSvgDataUrl(qr),
         last_error: null
       });
       console.log(`[Tenant: ${tenantName}] Scan this QR code to authenticate:`);
@@ -102,6 +133,7 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
         status: statusCode === DisconnectReason.loggedOut ? 'logged_out' : statusCode === 408 ? 'qr_timeout' : 'disconnected',
         should_reconnect: shouldReconnect,
         last_disconnect_code: statusCode || null,
+        qr_data_url: null,
         last_error: lastDisconnect?.error?.message || null
       });
       if (shouldReconnect) {
@@ -114,6 +146,7 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
       setWhatsAppSessionStatus(sessionId, {
         status: 'connected',
         connected_at: new Date().toISOString(),
+        qr_data_url: null,
         last_error: null
       });
       console.log(`[Tenant: ${tenantName}] WhatsApp connection opened. Monitoring messages...`);
