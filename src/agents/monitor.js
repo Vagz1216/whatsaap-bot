@@ -158,12 +158,21 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       console.error(`[Tenant: ${tenantName}] WhatsApp connection closed. Status Code:`, statusCode);
       
-      // Stop reconnecting if we get logged out (401) OR if the QR code times out (408)
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 408;
+      // Stop reconnecting for states that require operator action.
+      const shouldReconnect = ![
+        DisconnectReason.loggedOut,
+        DisconnectReason.connectionReplaced,
+        408
+      ].includes(statusCode);
+      const status =
+        statusCode === DisconnectReason.loggedOut ? 'logged_out' :
+        statusCode === DisconnectReason.connectionReplaced ? 'connection_replaced' :
+        statusCode === 408 ? 'qr_timeout' :
+        'disconnected';
       
       console.log(`[Tenant: ${tenantName}] WhatsApp connection closed. Reconnecting:`, shouldReconnect);
       setWhatsAppSessionStatus(sessionId, {
-        status: statusCode === DisconnectReason.loggedOut ? 'logged_out' : statusCode === 408 ? 'qr_timeout' : 'disconnected',
+        status,
         should_reconnect: shouldReconnect,
         last_disconnect_code: statusCode || null,
         qr_data_url: null,
@@ -174,6 +183,8 @@ export const startMonitor = async (tenantConfigOrCb, cbIfTenant) => {
         setTimeout(() => startMonitor(tenantConfigOrCb, cbIfTenant), 5000);
       } else if (statusCode === 408) {
         console.log(`[Tenant: ${tenantName}] QR Code generation timed out. Please restart the server when you are ready to scan.`);
+      } else if (statusCode === DisconnectReason.connectionReplaced) {
+        console.log(`[Tenant: ${tenantName}] WhatsApp connection was replaced by another active session. Stop the other worker/session before restarting this one.`);
       }
     } else if (connection === 'open') {
       setWhatsAppSessionStatus(sessionId, {
